@@ -6,5 +6,6 @@ python -m nuitka ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
   --include-data-dir=assets=assets ^
+  --include-data-dir=envedit/qml=envedit/qml ^
   --output-filename=EnvEdit.exe ^
   main.py

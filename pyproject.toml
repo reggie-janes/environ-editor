@@ -12,3 +12,10 @@ build = [
     "nuitka>=2.4",
     "ordered-set",
 ]
+test = [
+    "pytest>=8.0",
+    "pytest-qt>=4.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,19 +1,19 @@
 # EnvEdit
 
-A cross-platform desktop application for viewing and editing environment variables and PATH entries. Built with PySide6, packaged as a portable executable via Nuitka.
+A cross-platform desktop application for viewing and editing environment variables and PATH entries. Built with PySide6 and Qt Quick 2 (QML / Material style).
 
 ## Features
 
 - **4 tabs**: User Variables, User PATH, System Variables, System PATH
 - Inline editing with staged changes — nothing is written until you click **Apply Changes**
-- Modified rows highlighted in yellow; deleted rows in red
+- Diff preview before any write is committed
+- Modified rows highlighted; deleted rows tinted red
 - PATH entries show live status icons: ✅ exists · ⚠ missing · 🔗 symlink
 - Duplicate PATH entries highlighted in orange with a one-click **Remove Duplicates** action
 - Live filter bar on every tab
-- Diff preview before any write is committed
-- Unsaved-changes guard on tab switch and window close
-- Light/dark theme toggle (follows OS default, persisted in settings)
-- Window geometry persisted between sessions
+- Unsaved-changes guard on window close
+- Light/dark Material theme toggle (follows OS default, persisted in settings)
+- Window geometry and maximized state persisted between sessions
 
 ## Requirements
 
@@ -60,7 +60,7 @@ Then run the script for your platform from the repo root:
 | Windows | `build\build_windows.bat` |
 | macOS | `bash build/build_macos.sh` |
 
-Output is a single self-contained file (`EnvEdit` / `EnvEdit.exe`). No installer or system-level installation required.
+Output is a single self-contained file (`EnvEdit` / `EnvEdit.exe`). No installer required.
 
 > Cross-compilation is not supported by Nuitka. Build Windows binaries on a Windows host or CI runner.
 
@@ -69,13 +69,13 @@ Output is a single self-contained file (`EnvEdit` / `EnvEdit.exe`). No installer
 ### Linux / macOS
 
 - **User variables** are read from the process environment and parsed from `~/.profile`, `~/.bashrc`, `~/.zshrc`.
-- **Writes** go to `~/.config/envedit/env.sh`, which is automatically sourced from `~/.profile`. A new login session or `source ~/.profile` is needed to pick up changes in existing shells.
+- **Writes** go to `~/.config/envedit/env.sh`, automatically sourced from `~/.profile`. A new login session or `source ~/.profile` is needed to pick up changes in existing shells.
 - **System writes** invoke `pkexec` (or `sudo` as fallback) to write `/etc/environment`.
 
 ### Windows
 
 - **User variables** are read from and written to `HKCU\Environment` via `winreg`.
-- **System variables** use `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`; a UAC elevation prompt is shown if the process is not already elevated.
+- **System variables** use `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment`; a UAC elevation prompt is shown when not already elevated.
 - `WM_SETTINGCHANGE` is broadcast after every write so other processes pick up the change without a reboot.
 
 ## Devcontainer
@@ -93,18 +93,28 @@ To rebuild the container after Dockerfile changes: **Rebuild Container** from th
 ## Project structure
 
 ```
+assets/                          fonts (Roboto) and app icon
 envedit/
 ├── core/
-│   ├── env_backend.py       # Abstract EnvBackend interface + get_backend() factory
-│   ├── platform_unix.py     # Linux / macOS implementation
-│   ├── platform_windows.py  # Windows implementation (winreg + UAC)
-│   └── privilege.py         # Elevation detection and re-launch helpers
-└── ui/
-    ├── main_window.py        # QMainWindow with 4-tab layout
-    ├── env_table.py          # Variable table widget (Name / Value / Expanded / Actions)
-    ├── path_table.py         # PATH table widget with status icons and drag-drop
-    ├── dialogs.py            # Add, Confirm, Diff, Elevation, Unsaved-changes dialogs
-    └── theme.py              # Light/dark QPalette definitions and ThemeManager
-main.py                       # Entry point
-build/                        # Nuitka build scripts
+│   ├── env_backend.py           Abstract EnvBackend interface + get_backend() factory
+│   ├── platform_unix.py         Linux / macOS implementation
+│   ├── platform_windows.py      Windows implementation (winreg + UAC)
+│   └── privilege.py             Elevation detection and re-launch helpers
+├── models/
+│   ├── env_var_model.py         QAbstractListModel for environment variables
+│   └── path_model.py            QAbstractListModel for PATH entries
+├── controllers/
+│   └── app_controller.py        QObject owning all models; theme, settings, backend calls
+└── qml/
+    ├── main.qml                 ApplicationWindow, tab bar, theme, close guard
+    └── components/
+        ├── EnvTable.qml         Variable table (inline editing, pending highlights)
+        ├── PathTable.qml        PATH table (status icons, move up/down, duplicates)
+        ├── TabToolbar.qml       Add / Reload / Apply toolbar shared by all tabs
+        ├── AddVarDialog.qml     Add variable dialog with live expansion preview
+        ├── AddPathDialog.qml    Add PATH entry dialog with folder browser
+        ├── ConfirmDialog.qml    Generic confirmation dialog
+        └── DiffDialog.qml      Pending-changes diff before Apply
+main.py                          Entry point (QGuiApplication + QQmlApplicationEngine)
+build/                           Nuitka build scripts
 ```

@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+from PySide6.QtCore import (
+    QAbstractListModel, QModelIndex, Qt, Signal, Slot, Property
+)
+
+
+class EnvVarModel(QAbstractListModel):
+    NameRole     = Qt.UserRole + 1
+    ValueRole    = Qt.UserRole + 2
+    ExpandedRole = Qt.UserRole + 3
+    PendingRole  = Qt.UserRole + 4
+    DeletedRole  = Qt.UserRole + 5
+
+    pendingCountChanged = Signal()
+
+    def __init__(self, expand_fn=None, parent=None):
+        super().__init__(parent)
+        self._expand_fn = expand_fn or (lambda v: v)
+        self._rows: list[dict] = []          # {name, value}
+        self._original_rows: list[dict] = [] # snapshot for discard
+        self._pending: dict[str, str | None] = {}  # name -> new value | None=delete
+        self._filter: str = ""
+
+    # ------------------------------------------------------------------ QML properties
+
+    @Property(int, notify=pendingCountChanged)
+    def pendingCount(self) -> int:
+        return len(self._pending)
+
+    # ------------------------------------------------------------------ QAbstractListModel
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return len(self._visible_rows())
+
+    def roleNames(self):
+        return {
+            self.NameRole:     b"name",
+            self.ValueRole:    b"value",
+            self.ExpandedRole: b"expanded",
+            self.PendingRole:  b"isPending",
+            self.DeletedRole:  b"isDeleted",
+        }
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
+        if not index.isValid():
+            return None
+        rows = self._visible_rows()
+        if index.row() >= len(rows):
+            return None
+        row = rows[index.row()]
+        name = row["name"]
+        pending_val = self._pending.get(name, ...)  # ... = not in pending
+
+        if role == self.NameRole:
+            return name
+        if role == self.ValueRole:
+            return self._pending[name] if (pending_val is not ... and pending_val is not None) else row["value"]
+        if role == self.ExpandedRole:
+            v = self._pending[name] if (pending_val is not ... and pending_val is not None) else row["value"]
+            return self._expand_fn(v)
+        if role == self.PendingRole:
+            return pending_val is not ...
+        if role == self.DeletedRole:
+            return pending_val is None
+        return None
+
+    # ------------------------------------------------------------------ slots
+
+    @Slot(str, str)
+    def addVariable(self, name: str, value: str) -> None:
+        name = name.strip()
+        if not name:
+            return
+        # Check if already exists
+        for row in self._rows:
+            if row["name"] == name:
+                self._stage(name, value)
+                return
+        # New row
+        self._rows.append({"name": name, "value": ""})
+        self._rows.sort(key=lambda r: r["name"].lower())
+        self._pending[name] = value
+        self._reset()
+
+    @Slot(int, str, str)
+    def editVariable(self, index: int, name: str, value: str) -> None:
+        rows = self._visible_rows()
+        if index < 0 or index >= len(rows):
+            return
+        orig_name = rows[index]["name"]
+        if orig_name != name:
+            # Name changed: delete old, add new
+            self._pending[orig_name] = None
+            existing = next((r for r in self._rows if r["name"] == name), None)
+            if not existing:
+                self._rows.append({"name": name, "value": ""})
+            self._pending[name] = value
+            self._reset()
+        else:
+            self._stage(orig_name, value)
+
+    @Slot(int)
+    def deleteVariable(self, index: int) -> None:
+        rows = self._visible_rows()
+        if index < 0 or index >= len(rows):
+            return
+        name = rows[index]["name"]
+        self._pending[name] = None
+        self._notify_row(index)
+
+    @Slot(str)
+    def setFilter(self, text: str) -> None:
+        self._filter = text.lower()
+        self._reset()
+
+    @Slot()
+    def discardChanges(self) -> None:
+        self._rows = [dict(r) for r in self._original_rows]
+        self._pending.clear()
+        self._reset()
+
+    def loadData(self, vars_: dict[str, str]) -> None:
+        self._rows = [{"name": k, "value": v} for k, v in sorted(vars_.items())]
+        self._original_rows = [dict(r) for r in self._rows]
+        self._pending.clear()
+        self._reset()
+
+    def getPendingChanges(self) -> dict[str, str | None]:
+        return dict(self._pending)
+
+    # ------------------------------------------------------------------ internals
+
+    def _visible_rows(self) -> list[dict]:
+        if not self._filter:
+            return self._rows
+        return [r for r in self._rows
+                if self._filter in r["name"].lower() or self._filter in r["value"].lower()]
+
+    def _stage(self, name: str, value: str) -> None:
+        orig = next((r["value"] for r in self._rows if r["name"] == name), None)
+        old_count = len(self._pending)
+        if value == orig:
+            self._pending.pop(name, None)
+        else:
+            self._pending[name] = value
+        idx = next((i for i, r in enumerate(self._visible_rows()) if r["name"] == name), -1)
+        if idx >= 0:
+            mi = self.index(idx, 0)
+            self.dataChanged.emit(mi, mi, [self.ValueRole, self.ExpandedRole, self.PendingRole])
+        if len(self._pending) != old_count:
+            self.pendingCountChanged.emit()
+
+    def _notify_row(self, index: int) -> None:
+        mi = self.index(index, 0)
+        self.dataChanged.emit(mi, mi, list(self.roleNames().keys()))
+        self.pendingCountChanged.emit()
+
+    def _reset(self) -> None:
+        self.beginResetModel()
+        self.endResetModel()
+        self.pendingCountChanged.emit()

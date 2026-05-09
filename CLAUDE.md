@@ -11,9 +11,9 @@ QPA_PLATFORM=offscreen uv run python main.py     # headless smoke test
 
 ## Architecture
 
-The codebase has two independent layers:
+The codebase has three layers:
 
-**Core (`envedit/core/`)** — pure Python, no Qt imports.
+**Core (`envedit/core/`)** — pure Python, no Qt UI imports.
 
 | File | Role |
 |------|------|
@@ -22,28 +22,61 @@ The codebase has two independent layers:
 | `platform_windows.py` | Windows: `winreg` reads/writes; all `winreg`/`ctypes` imports are inside methods so the file imports cleanly on Linux |
 | `privilege.py` | `is_elevated()` + `request_elevation_and_apply()` — re-launches via `pkexec`/`runas`/`osascript` |
 
-**UI (`envedit/ui/`)** — PySide6 only; no direct backend calls except from `MainWindow`.
+**Python models + controller (`envedit/models/`, `envedit/controllers/`)** — QObject/QAbstractListModel bridge between the core and QML.
 
 | File | Role |
 |------|------|
-| `main_window.py` | `MainWindow(QMainWindow)`: 4-tab layout, toolbars, status bar, unsaved-changes guard |
-| `env_table.py` | `EnvTableWidget`: variable table with inline editing and pending-change tracking |
-| `path_table.py` | `PathTableWidget`: PATH table with status icons, drag-drop reorder, duplicate detection |
-| `dialogs.py` | `AddVariableDialog`, `AddPathEntryDialog`, `ConfirmDeleteDialog`, `UnsavedChangesDialog`, `ElevationDialog`, `DiffDialog` |
-| `theme.py` | `ThemeManager`: light/dark `QPalette` definitions, OS theme detection, `QSettings` persistence |
+| `models/env_var_model.py` | `EnvVarModel(QAbstractListModel)`: roles Name/Value/Expanded/Pending/Deleted; staged edits in `_pending` dict; `pendingCount` Property |
+| `models/path_model.py` | `PathModel(QAbstractListModel)`: roles Path/Expanded/Status/Pending/Duplicate; `_dirty` flag; moveUp/moveDown/removeDuplicates slots |
+| `controllers/app_controller.py` | `AppController(QObject)`: owns all 4 models; `theme`, `isElevated`, `platformName` properties; `toggleTheme`, `reloadTab`, `applyTab`, `getDiffText`, `expandValue`, window-geometry slots |
+
+**QML UI (`envedit/qml/`)** — Qt Quick 2 with Material style; no Python logic.
+
+| File | Role |
+|------|------|
+| `main.qml` | `ApplicationWindow`: Material theming, TabBar, StackLayout, theme toggle, close guard |
+| `components/EnvTable.qml` | Variable table: inline `TextInput` editing, pending/deleted row highlights, filter bar |
+| `components/PathTable.qml` | PATH table: status icons, move-up/down buttons, duplicate highlight, filter bar |
+| `components/TabToolbar.qml` | Add / Reload / Apply toolbar; Apply enabled only when `pendingCount > 0` |
+| `components/AddVarDialog.qml` | Add-variable dialog with live expanded preview |
+| `components/AddPathDialog.qml` | Add-PATH dialog with folder browser |
+| `components/ConfirmDialog.qml` | Generic confirm/cancel dialog |
+| `components/DiffDialog.qml` | Pending-changes diff before Apply |
+| `components/Theme.qml` | Singleton color palette — 7 semantic colors with dark/light variants; all QML components read from this instead of hardcoding colors |
+
+`main.py` wires everything together:
+```python
+app = QGuiApplication(sys.argv)
+controller = AppController()
+engine = QQmlApplicationEngine()
+engine.rootContext().setContextProperty("appController", controller)
+engine.addImportPath(str(QML_DIR))      # enables  import "components"  in QML
+engine.load(str(QML_DIR / "main.qml"))
+```
 
 ## Key design decisions
 
-- **Staged writes**: edits are held in `_pending` dicts inside the table widgets and only committed when the user clicks "Apply Changes". `get_pending_changes()` / `clear_pending()` are the API between `MainWindow` and the table widgets.
+- **Staged writes**: edits are held in model-level pending state (`_pending` dict in `EnvVarModel`, `_dirty` flag in `PathModel`) and only committed when the user clicks "Apply Changes". `pendingCount` Property drives the Apply button's enabled state via QML binding.
+- **Material theming**: `ApplicationWindow.Material.theme` is bound to `appController.theme`; a single property-change signal re-renders the entire UI with no palette manipulation.
+- **Null guards in QML**: all bindings that read `appController` use `appController && appController.prop` guards because QML evaluates bindings before the context property resolves.
 - **Platform isolation**: `platform_windows.py` imports `winreg`/`ctypes` only inside method bodies, never at module level. `get_backend()` in `env_backend.py` selects the right class at runtime.
-- **No pywin32 in pyproject.toml**: it is Windows-only and must be installed separately on a Windows host. It is not listed as a project dependency.
+- **Case-insensitive PATH lookup on Windows**: the registry stores the key as "Path", not "PATH". `_iget()` in `platform_windows.py` does a case-insensitive dict lookup.
 - **User PATH writes on Unix** go through `apply_user_vars({"PATH": ...})` which lands in `~/.config/envedit/env.sh`. A source line is automatically appended to `~/.profile` on first write.
 
 ## Adding a new platform
 
 1. Create `envedit/core/platform_<name>.py` implementing all methods of `EnvBackend`.
 2. Add a branch in `get_backend()` in `env_backend.py`.
-3. No UI changes required.
+3. No model, controller, or QML changes required.
+
+## Tests
+
+```sh
+uv run pytest          # all tests
+uv run pytest tests/test_env_backend.py   # one file
+```
+
+Tests live in `tests/`. `conftest.py` sets `QT_QPA_PLATFORM=offscreen` so Qt can initialise without a display. The suite covers the core backend, models, controller, and privilege helpers.
 
 ## Devcontainer
 

@@ -1,0 +1,9 @@
+module components
+singleton Theme 1.0 Theme.qml
+EnvTable       1.0 EnvTable.qml
+PathTable      1.0 PathTable.qml
+TabToolbar     1.0 TabToolbar.qml
+AddVarDialog   1.0 AddVarDialog.qml
+AddPathDialog  1.0 AddPathDialog.qml
+ConfirmDialog  1.0 ConfirmDialog.qml
+DiffDialog     1.0 DiffDialog.qml
