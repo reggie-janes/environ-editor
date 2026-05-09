@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+import sys
+from abc import ABC, abstractmethod
+
+
+class EnvBackend(ABC):
+    @abstractmethod
+    def get_user_vars(self) -> dict[str, str]: ...
+
+    @abstractmethod
+    def get_system_vars(self) -> dict[str, str]: ...
+
+    @abstractmethod
+    def get_user_path(self) -> list[str]: ...
+
+    @abstractmethod
+    def get_system_path(self) -> list[str]: ...
+
+    @abstractmethod
+    def apply_user_vars(self, changes: dict[str, str | None]) -> None:
+        """Apply changes to user variables. A None value means delete the key."""
+
+    @abstractmethod
+    def apply_system_vars(self, changes: dict[str, str | None]) -> None:
+        """Apply changes to system variables. A None value means delete the key."""
+
+    @abstractmethod
+    def apply_user_path(self, entries: list[str]) -> None:
+        """Replace the full user PATH with the given list."""
+
+    @abstractmethod
+    def apply_system_path(self, entries: list[str]) -> None:
+        """Replace the full system PATH with the given list."""
+
+    @abstractmethod
+    def expand_value(self, value: str) -> str: ...
+
+
+def get_backend() -> EnvBackend:
+    if sys.platform == "win32":
+        from envedit.core.platform_windows import WindowsBackend
+        return WindowsBackend()
+    else:
+        from envedit.core.platform_unix import UnixBackend
+        return UnixBackend()

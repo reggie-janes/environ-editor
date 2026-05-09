@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# Build output
+dist/
+build/*.dist/
+build/*.build/
+/EnvEdit
+/EnvEdit.exe
+# core.ignorecase=true would otherwise swallow the envedit/ package
+!/envedit/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

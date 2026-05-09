@@ -1,0 +1,42 @@
+// Only tools every teammate needs for the project belong here.
+// Personal tooling (AI assistants, icon themes, shell aliases) lives in
+// each developer's own dotfiles repo.
+{
+    "name": "environ-editor",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+
+    "features": {
+        "ghcr.io/va-h/devcontainers-features/uv:1": {}
+    },
+
+    "mounts": [
+        "source=${localWorkspaceFolderBasename}-venv,target=${containerWorkspaceFolder}/.venv,type=volume",
+        "source=${localWorkspaceFolderBasename}-claude,target=/home/vscode/.claude,type=volume"
+    ],
+
+    "initializeCommand": "bash .devcontainer/host-init.sh",
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    "postStartCommand": "bash .devcontainer/post-start.sh",
+
+    "remoteEnv": {
+        "GIT_USER_NAME_OVERRIDE": "${localEnv:GIT_USER_NAME_OVERRIDE}",
+        "GIT_USER_EMAIL_OVERRIDE": "${localEnv:GIT_USER_EMAIL_OVERRIDE}"
+    },
+
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance"
+            ],
+            "settings": {
+                "remote.restoreForwardedPorts": false
+            }
+        }
+    },
+
+    "remoteUser": "vscode",
+    "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}"
+}
