@@ -15,11 +15,14 @@ from envedit.models.path_model import PathModel
 class AppController(QObject):
     themeChanged = Signal()
     errorOccurred = Signal(str)
+    isBusyChanged = Signal()
+    _elevatedApplyDone = Signal(int, bool)  # (tab index, timed_out); from background thread
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._settings = QSettings("EnvEdit", "EnvEdit")
         self._backend: EnvBackend = get_backend()
+        self._is_busy = False
 
         expand = self._backend.expand_value
         self._user_var_model  = EnvVarModel(expand_fn=expand)
@@ -31,6 +34,7 @@ class AppController(QObject):
         for m in (self._user_var_model, self._system_var_model):
             m.errorOccurred.connect(self.errorOccurred)
 
+        self._elevatedApplyDone.connect(self._onElevatedApplyDone)
         self._load_all()
 
     # ------------------------------------------------------------------ models (read-only properties)
@@ -56,6 +60,10 @@ class AppController(QObject):
     @Property(bool, constant=True)
     def isElevated(self) -> bool:
         return is_elevated()
+
+    @Property(bool, notify=isBusyChanged)
+    def isBusy(self) -> bool:
+        return self._is_busy
 
     @Property(str, constant=True)
     def platformName(self) -> str:
@@ -134,11 +142,25 @@ class AppController(QObject):
                 self._backend.apply_user_path(self._user_path_model.getEntries())
                 self._reload(1)
             elif idx == 2:
-                self._backend.apply_system_vars(self._system_var_model.getPendingChanges())
-                self._reload(2)
+                applied = self._backend.apply_system_vars(
+                    self._system_var_model.getPendingChanges(),
+                    on_complete=lambda timed_out=False: self._elevatedApplyDone.emit(2, timed_out),
+                )
+                if applied:
+                    self._reload(2)
+                else:
+                    self._is_busy = True
+                    self.isBusyChanged.emit()
             elif idx == 3:
-                self._backend.apply_system_path(self._system_path_model.getEntries())
-                self._reload(3)
+                applied = self._backend.apply_system_path(
+                    self._system_path_model.getEntries(),
+                    on_complete=lambda timed_out=False: self._elevatedApplyDone.emit(3, timed_out),
+                )
+                if applied:
+                    self._reload(3)
+                else:
+                    self._is_busy = True
+                    self.isBusyChanged.emit()
         except Exception as exc:
             self.errorOccurred.emit(str(exc))
 
@@ -166,6 +188,14 @@ class AppController(QObject):
         self._system_var_model.loadData(self._backend.get_system_vars())
         self._user_path_model.loadData(self._backend.get_user_path())
         self._system_path_model.loadData(self._backend.get_system_path())
+
+    @Slot(int, bool)
+    def _onElevatedApplyDone(self, idx: int, timed_out: bool) -> None:
+        self._is_busy = False
+        self.isBusyChanged.emit()
+        if timed_out:
+            self.errorOccurred.emit("Elevated apply timed out — the process may have hung.")
+        self._reload(idx)
 
     def _reload(self, idx: int) -> None:
         if idx == 0:

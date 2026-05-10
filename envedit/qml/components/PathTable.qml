@@ -192,6 +192,10 @@ Item {
                         leftPadding: 4
                         clip: true
                         selectByMouse: true
+                        onTextChanged: {
+                            if (activeFocus && text !== model.path)
+                                root.model.editEntry(index, text)
+                        }
                         onEditingFinished: root.model.editEntry(index, text)
                     }
 

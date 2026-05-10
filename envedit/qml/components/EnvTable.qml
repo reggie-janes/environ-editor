@@ -172,6 +172,10 @@ Item {
                         leftPadding: 4
                         clip: true
                         selectByMouse: true
+                        onTextChanged: {
+                            if (activeFocus && text !== model.value)
+                                root.model.editVariable(index, model.name, text)
+                        }
                         onEditingFinished: if (text !== model.value) root.model.editVariable(index, nameInput.text, text)
                     }
 

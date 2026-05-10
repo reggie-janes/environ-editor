@@ -47,11 +47,12 @@ class WindowsBackend(EnvBackend):
                     winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, val)
         self._broadcast_change()
 
-    def apply_system_vars(self, changes: dict[str, str | None]) -> None:
+    def apply_system_vars(self, changes: dict[str, str | None], on_complete=None) -> bool:
         from envedit.core.privilege import is_elevated, request_elevation_and_apply
         if not is_elevated():
-            request_elevation_and_apply({"system_vars": changes})
-            return
+            if not request_elevation_and_apply({"system_vars": changes}, on_complete=on_complete):
+                raise RuntimeError("Elevation was cancelled.")
+            return False  # elevated child was launched but hasn't written yet
         import winreg
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _HKLM_ENV, 0,
                             winreg.KEY_SET_VALUE) as key:
@@ -64,12 +65,13 @@ class WindowsBackend(EnvBackend):
                 else:
                     winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, val)
         self._broadcast_change()
+        return True
 
     def apply_user_path(self, entries: list[str]) -> None:
         self.apply_user_vars({"PATH": os.pathsep.join(entries)})
 
-    def apply_system_path(self, entries: list[str]) -> None:
-        self.apply_system_vars({"PATH": os.pathsep.join(entries)})
+    def apply_system_path(self, entries: list[str], on_complete=None) -> bool:
+        return self.apply_system_vars({"PATH": os.pathsep.join(entries)}, on_complete=on_complete)
 
     def expand_value(self, value: str) -> str:
         import ctypes

@@ -108,7 +108,7 @@ class UnixBackend(EnvBackend):
         _write_env_sh(_ENVEDIT_SH, existing)
         _ensure_sourced_in_profile()
 
-    def apply_system_vars(self, changes: dict[str, str | None]) -> None:
+    def apply_system_vars(self, changes: dict[str, str | None], on_complete=None) -> bool:
         # Write to /etc/profile.d/envedit.sh rather than /etc/environment.
         # /etc/environment is co-managed (cloud-init, distro packages, PAM
         # comments) and parsing/rewriting it loses foreign content. The
@@ -124,12 +124,13 @@ class UnixBackend(EnvBackend):
                 existing[key] = val
         content = _format_env_sh(existing)
         _write_as_root(_SYSTEM_PROFILE_D, content)
+        return True
 
     def apply_user_path(self, entries: list[str]) -> None:
         self.apply_user_vars({"PATH": os.pathsep.join(entries)})
 
-    def apply_system_path(self, entries: list[str]) -> None:
-        self.apply_system_vars({"PATH": os.pathsep.join(entries)})
+    def apply_system_path(self, entries: list[str], on_complete=None) -> bool:
+        return self.apply_system_vars({"PATH": os.pathsep.join(entries)})
 
     def expand_value(self, value: str) -> str:
         return os.path.expandvars(value)
@@ -188,7 +189,7 @@ def _write_as_root(path: Path, content: str) -> None:
     try:
         tool = "pkexec" if shutil.which("pkexec") else "sudo"
         subprocess.run(
-            [tool, "cp", tmp_path, str(path)],
+            [tool, "install", "-m", "644", tmp_path, str(path)],
             check=True,
         )
     finally:

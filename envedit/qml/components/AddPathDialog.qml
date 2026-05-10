@@ -20,6 +20,7 @@ Dialog {
     }
 
     onOpened: { pathField.text = ""; pathField.forceActiveFocus() }
+    onClosed: { pathField.text = ""; statusText.text = "" }
 
     Platform.FolderDialog {
         id: folderDialog

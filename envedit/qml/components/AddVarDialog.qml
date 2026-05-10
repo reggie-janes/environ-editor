@@ -26,6 +26,12 @@ Dialog {
         nameField.forceActiveFocus()
     }
 
+    onClosed: {
+        nameField.text = ""
+        valueField.text = ""
+        expandedLabel.text = ""
+    }
+
     ColumnLayout {
         width: parent.width
         spacing: 16

@@ -21,6 +21,7 @@ class EnvVarModel(QAbstractListModel):
         self._rows: list[dict] = []          # {name, value}
         self._original_rows: list[dict] = [] # snapshot for discard
         self._pending: dict[str, str | None] = {}  # name -> new value | None=delete
+        self._new_names: set[str] = set()  # added but never applied
         self._filter: str = ""
         # name -> row dict; kept in sync with _rows so _stage and edit
         # paths don't need O(n) linear scans.
@@ -84,6 +85,7 @@ class EnvVarModel(QAbstractListModel):
         self._rows.sort(key=lambda r: r["name"].lower())
         self._by_name[name] = new_row
         self._pending[name] = value
+        self._new_names.add(name)
         self._reset()
 
     @Slot(int, str, str)
@@ -107,11 +109,18 @@ class EnvVarModel(QAbstractListModel):
                 mi = self.index(index, 0)
                 self.dataChanged.emit(mi, mi, [self.NameRole])
                 return
-            self._pending[orig_name] = None
+            if orig_name in self._new_names:
+                self._rows.remove(self._by_name[orig_name])
+                del self._by_name[orig_name]
+                del self._pending[orig_name]
+                self._new_names.discard(orig_name)
+            else:
+                self._pending[orig_name] = None
             new_row = {"name": name, "value": ""}
             self._rows.append(new_row)
             self._by_name[name] = new_row
             self._pending[name] = value
+            self._new_names.add(name)
             self._reset()
         else:
             self._stage(orig_name, value)
@@ -122,8 +131,15 @@ class EnvVarModel(QAbstractListModel):
         if index < 0 or index >= len(rows):
             return
         name = rows[index]["name"]
-        self._pending[name] = None
-        self._notify_row(index)
+        if name in self._new_names:
+            self._rows.remove(self._by_name[name])
+            del self._by_name[name]
+            del self._pending[name]
+            self._new_names.discard(name)
+            self._reset()
+        else:
+            self._pending[name] = None
+            self._notify_row(index)
 
     @Slot(int)
     def restoreVariable(self, index: int) -> None:
@@ -145,13 +161,15 @@ class EnvVarModel(QAbstractListModel):
         self._rows = [dict(r) for r in self._original_rows]
         self._by_name = {r["name"]: r for r in self._rows}
         self._pending.clear()
+        self._new_names.clear()
         self._reset()
 
     def loadData(self, vars_: dict[str, str]) -> None:
-        self._rows = [{"name": k, "value": v} for k, v in sorted(vars_.items())]
+        self._rows = [{"name": k, "value": v} for k, v in sorted(vars_.items(), key=lambda kv: kv[0].lower())]
         self._original_rows = [dict(r) for r in self._rows]
         self._by_name = {r["name"]: r for r in self._rows}
         self._pending.clear()
+        self._new_names.clear()
         self._reset()
 
     def getPendingChanges(self) -> dict[str, str | None]:
@@ -169,7 +187,7 @@ class EnvVarModel(QAbstractListModel):
         row = self._by_name.get(name)
         orig = row["value"] if row is not None else None
         old_count = len(self._pending)
-        if value == orig:
+        if value == orig and name not in self._new_names:
             self._pending.pop(name, None)
         else:
             self._pending[name] = value
