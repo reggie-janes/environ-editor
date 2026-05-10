@@ -16,6 +16,8 @@ Item {
     DiffDialog   { id: diffDialog;    onApplyRequested: tabIndex => appController.applyTab(tabIndex) }
     AddVarDialog { id: addVarDialog;  onVariableAdded: (n, v) => root.model.addVariable(n, v) }
 
+    TextEdit { id: clipHelper; visible: false; width: 0; height: 0 }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -114,6 +116,7 @@ Item {
 
             delegate: Rectangle {
                 id: rowBg
+                property int clickedColumn: 0
                 width: listView.width
                 height: 38
                 color: {
@@ -199,11 +202,36 @@ Item {
                 MouseArea {
                     anchors.fill: parent
                     acceptedButtons: Qt.RightButton
-                    onClicked: rowMenu.popup()
+                    onClicked: mouse => {
+                        rowBg.clickedColumn = mouse.x < 8 + root.colName ? 0
+                                            : mouse.x < 8 + root.colName + root.colValue ? 1 : 2
+                        rowMenu.popup()
+                    }
                 }
 
                 Menu {
                     id: rowMenu
+                    MenuItem {
+                        text: rowBg.clickedColumn === 0 ? "Copy Variable Name"
+                            : rowBg.clickedColumn === 1 ? "Copy Value"
+                            : "Copy Expanded Value"
+                        font.pixelSize: 13
+                        implicitHeight: 36
+                        topPadding: 6
+                        bottomPadding: 6
+                        icon.source: "../../../assets/icons/copy.svg"
+                        icon.color: Theme.textNormal
+                        icon.width: 20
+                        icon.height: 20
+                        onTriggered: {
+                            clipHelper.text = rowBg.clickedColumn === 0 ? model.name
+                                            : rowBg.clickedColumn === 1 ? model.value
+                                            : model.expanded
+                            clipHelper.selectAll()
+                            clipHelper.copy()
+                        }
+                    }
+                    MenuSeparator {}
                     MenuItem {
                         text: model.isDeleted ? "Restore" : "Delete"
                         font.pixelSize: 13

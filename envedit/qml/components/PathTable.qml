@@ -17,6 +17,8 @@ Item {
     DiffDialog   { id: diffDialog;   onApplyRequested: tabIndex => appController.applyTab(tabIndex) }
     AddPathDialog { id: addPathDialog; onEntryAdded: path => root.model.addEntry(path) }
 
+    TextEdit { id: clipHelper; visible: false; width: 0; height: 0 }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -96,6 +98,7 @@ Item {
                 // ListView.view is only set on the delegate root; capture it here
                 // so children (DragHandler signal handlers) can access ListView properties
                 property var lv: ListView.view
+                property int clickedColumn: 0  // 0 = path, 1 = expanded
 
                 width: lv ? lv.width : 0
                 height: 38
@@ -236,11 +239,31 @@ Item {
                     anchors.right: parent.right
                     hoverEnabled: true
                     acceptedButtons: Qt.RightButton
-                    onClicked: rowMenu.popup()
+                    onClicked: mouse => {
+                        rowBg.clickedColumn = mouse.x < root.colPath ? 0 : 1
+                        rowMenu.popup()
+                    }
                 }
 
                 Menu {
                     id: rowMenu
+                    MenuItem {
+                        text: rowBg.clickedColumn === 0 ? "Copy Path Entry" : "Copy Expanded Path Entry"
+                        font.pixelSize: 13
+                        implicitHeight: 36
+                        topPadding: 6
+                        bottomPadding: 6
+                        icon.source: "../../../assets/icons/copy.svg"
+                        icon.color: Theme.textNormal
+                        icon.width: 20
+                        icon.height: 20
+                        onTriggered: {
+                            clipHelper.text = rowBg.clickedColumn === 0 ? model.path : model.expanded
+                            clipHelper.selectAll()
+                            clipHelper.copy()
+                        }
+                    }
+                    MenuSeparator {}
                     MenuItem {
                         text: "Open Folder"
                         font.pixelSize: 13
