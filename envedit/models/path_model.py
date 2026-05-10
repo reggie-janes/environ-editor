@@ -114,7 +114,14 @@ class PathModel(QAbstractListModel):
         # so reverting the only outstanding edit clears _dirty.
         self._recalculate_dirty()
         self._refresh_dup_counts()
-        self._reset()
+        # Use dataChanged instead of _reset() so ListView delegates are not
+        # destroyed and recreated — that would steal focus from the TextInput
+        # after every keystroke. Dup counts may affect any visible row so we
+        # notify all rows; the focused TextInput's text binding is already
+        # broken by user input so it won't be overwritten.
+        if self.rowCount() > 0:
+            self.dataChanged.emit(self.index(0), self.index(self.rowCount() - 1))
+        self.pendingCountChanged.emit()
 
     @Slot(int)
     def restoreEntry(self, index: int) -> None:
@@ -196,7 +203,9 @@ class PathModel(QAbstractListModel):
                 deduped.append(e)
         if len(deduped) != len(self._entries):
             self._entries = deduped
-            self._mark_dirty()
+            self._recalculate_dirty()
+            self._refresh_dup_counts()
+            self._reset()
 
     @Slot(str)
     def setFilter(self, text: str) -> None:
