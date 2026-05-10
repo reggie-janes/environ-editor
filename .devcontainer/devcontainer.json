@@ -11,9 +11,15 @@
         "ghcr.io/va-h/devcontainers-features/uv:1": {}
     },
 
+    // Three named volumes, all keyed by the workspace folder name so they're
+    // unique per project:
+    //   -venv         keeps the Python virtualenv warm across rebuilds
+    //   -claude       persists ~/.claude/ (sessions, history, settings, creds)
+    //   -claude-bin   persists Claude Code version downloads (~250 MB each)
     "mounts": [
         "source=${localWorkspaceFolderBasename}-venv,target=${containerWorkspaceFolder}/.venv,type=volume",
-        "source=${localWorkspaceFolderBasename}-claude,target=/home/vscode/.claude,type=volume"
+        "source=${localWorkspaceFolderBasename}-claude,target=/home/vscode/.claude,type=volume",
+        "source=${localWorkspaceFolderBasename}-claude-bin,target=/home/vscode/.local/share/claude,type=volume"
     ],
 
     "initializeCommand": "bash .devcontainer/host-init.sh",
@@ -29,7 +35,8 @@
         "vscode": {
             "extensions": [
                 "ms-python.python",
-                "ms-python.vscode-pylance"
+                "ms-python.vscode-pylance",
+                "theqtcompany.qt-python-pack"
             ],
             "settings": {
                 "remote.restoreForwardedPorts": false
