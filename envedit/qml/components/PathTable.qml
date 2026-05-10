@@ -16,13 +16,6 @@ Item {
 
     DiffDialog   { id: diffDialog;   onApplyRequested: tabIndex => appController.applyTab(tabIndex) }
     AddPathDialog { id: addPathDialog; onEntryAdded: path => root.model.addEntry(path) }
-    ConfirmDialog {
-        id: confirmDelete
-        property int pendingIndex: -1
-        message: "Delete this PATH entry? This cannot be undone."
-        confirmText: "Delete"
-        onConfirmed: root.model.deleteEntry(pendingIndex)
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -52,11 +45,12 @@ Item {
             Layout.topMargin: 4
             Layout.bottomMargin: 4
             Layout.preferredHeight: 36
-            placeholderText: focus || text ? "" : "Filter by name or value…"
+            placeholderText: focus || text ? "" : "Filter PATH entries…"
             font.family: "Roboto Mono"
             font.pixelSize: 13
             leftPadding: 10
             onTextChanged: root.model && root.model.setFilter(text)
+            Keys.onEscapePressed: clear()
             background: Rectangle {
                 radius: 4
                 color: Theme.surface
@@ -107,6 +101,7 @@ Item {
                 height: 38
                 opacity: lv && lv.dragActive && lv.dragFromIndex === index ? 0.35 : 1.0
                 color: {
+                    if (model.isDeleted)   return Theme.rowDeleted
                     if (model.isDuplicate) return Theme.rowDuplicate
                     if (model.isPending)   return Theme.rowPending
                     return dragArea.containsMouse ? Theme.rowHover : Theme.transparent
@@ -157,6 +152,7 @@ Item {
                         DragHandler {
                             target: null
                             cursorShape: Qt.ClosedHandCursor
+                            enabled: !root.model.filterActive
                             onActiveChanged: {
                                 var lv = rowBg.lv
                                 if (!lv) return
@@ -189,7 +185,7 @@ Item {
                         width: root.colPath
                         height: parent.height
                         text: model.path
-                        color: Theme.textNormal
+                        color: model.isDeleted ? Theme.colorNegative : Theme.textNormal
                         font.family: "Roboto Mono"
                         font.pixelSize: 13
                         verticalAlignment: Text.AlignVCenter
@@ -205,7 +201,7 @@ Item {
                         height: parent.height
                         text: model.expanded
                         readOnly: true
-                        color: Theme.textNormal
+                        color: model.isDeleted ? Theme.colorNegative : Theme.textNormal
                         opacity: 0.5
                         font.family: "Roboto Mono"
                         font.pixelSize: 13
@@ -264,6 +260,9 @@ Item {
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
+                        // Reordering while filtered crosses invisible rows;
+                        // disable to avoid surprising the user.
+                        enabled: !root.model.filterActive
                         onTriggered: root.model.moveUp(index)
                     }
                     MenuItem {
@@ -276,23 +275,23 @@ Item {
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
+                        enabled: !root.model.filterActive
                         onTriggered: root.model.moveDown(index)
                     }
                     MenuSeparator {}
                     MenuItem {
-                        text: "Delete"
+                        text: model.isDeleted ? "Restore" : "Delete"
                         font.pixelSize: 13
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
-                        icon.source: "../../../assets/icons/delete.svg"
+                        icon.source: model.isDeleted ? "../../../assets/icons/restore.svg"
+                                                     : "../../../assets/icons/delete.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
-                        onTriggered: {
-                            confirmDelete.pendingIndex = index
-                            confirmDelete.open()
-                        }
+                        onTriggered: model.isDeleted ? root.model.restoreEntry(index)
+                                                     : root.model.deleteEntry(index)
                     }
                 }
             }

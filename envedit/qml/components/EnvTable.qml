@@ -13,16 +13,8 @@ Item {
     readonly property int colValue:    colExpanded
     readonly property int scrollBarWidth: 12
 
-    // pending changes confirmation flow
     DiffDialog   { id: diffDialog;    onApplyRequested: tabIndex => appController.applyTab(tabIndex) }
     AddVarDialog { id: addVarDialog;  onVariableAdded: (n, v) => root.model.addVariable(n, v) }
-    ConfirmDialog {
-        id: confirmDelete
-        property int pendingIndex: -1
-        message: "Delete this variable? This cannot be undone."
-        confirmText: "Delete"
-        onConfirmed: root.model.deleteVariable(pendingIndex)
-    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -56,6 +48,7 @@ Item {
             font.pixelSize: 13
             leftPadding: 10
             onTextChanged: root.model && root.model.setFilter(text)
+            Keys.onEscapePressed: clear()
             background: Rectangle {
                 radius: 4
                 color: Theme.surface
@@ -158,7 +151,12 @@ Item {
                         leftPadding: 4
                         clip: true
                         selectByMouse: true
-                        onEditingFinished: root.model.editVariable(index, text, valueInput.text)
+                        // Only fire editVariable when this field actually
+                        // changed; otherwise tabbing between the name and
+                        // value inputs would fire two redundant edits per
+                        // visit and could surface a spurious "name already
+                        // exists" error after a value-only edit.
+                        onEditingFinished: if (text !== model.name) root.model.editVariable(index, text, valueInput.text)
                     }
 
                     // Value
@@ -174,7 +172,7 @@ Item {
                         leftPadding: 4
                         clip: true
                         selectByMouse: true
-                        onEditingFinished: root.model.editVariable(index, nameInput.text, text)
+                        onEditingFinished: if (text !== model.value) root.model.editVariable(index, nameInput.text, text)
                     }
 
                     // Expanded (read-only, selectable)
@@ -203,19 +201,18 @@ Item {
                 Menu {
                     id: rowMenu
                     MenuItem {
-                        text: "Delete"
+                        text: model.isDeleted ? "Restore" : "Delete"
                         font.pixelSize: 13
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
-                        icon.source: "../../../assets/icons/delete.svg"
+                        icon.source: model.isDeleted ? "../../../assets/icons/restore.svg"
+                                                     : "../../../assets/icons/delete.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
-                        onTriggered: {
-                            confirmDelete.pendingIndex = index
-                            confirmDelete.open()
-                        }
+                        onTriggered: model.isDeleted ? root.model.restoreVariable(index)
+                                                     : root.model.deleteVariable(index)
                     }
                 }
             }

@@ -35,22 +35,21 @@ def _parse_shell_assigns(text: str) -> dict[str, str]:
     return result
 
 
-def _read_user_shell_vars() -> dict[str, str]:
-    candidates = [
-        Path.home() / ".profile",
-        Path.home() / ".bash_profile",
-        Path.home() / ".bashrc",
-        Path.home() / ".zshrc",
-        _ENVEDIT_SH,
-    ]
-    merged: dict[str, str] = {}
-    for p in candidates:
-        if p.is_file():
-            try:
-                merged.update(_parse_shell_assigns(p.read_text(errors="replace")))
-            except OSError:
-                pass
-    return merged
+def _read_envedit_vars() -> dict[str, str]:
+    """Read variables from the EnvEdit-managed file.
+
+    We do not parse arbitrary user shell-init scripts (`~/.profile`,
+    `~/.bashrc`, etc.) because they contain conditionals, comments,
+    multi-assign exports, and quoting forms that a regex parser cannot
+    represent without misinterpretation. `_ENVEDIT_SH` is in a fixed
+    `export NAME="VALUE"` format that we own end-to-end.
+    """
+    if not _ENVEDIT_SH.is_file():
+        return {}
+    try:
+        return _parse_shell_assigns(_ENVEDIT_SH.read_text(errors="replace"))
+    except OSError:
+        return {}
 
 
 def _read_system_env_file() -> dict[str, str]:
@@ -70,8 +69,11 @@ def _read_system_env_file() -> dict[str, str]:
 
 class UnixBackend(EnvBackend):
     def get_user_vars(self) -> dict[str, str]:
-        raw = dict(os.environ)
-        raw.update(_read_user_shell_vars())
+        # os.environ wins (it's the live session state); the EnvEdit-managed
+        # file fills in keys that haven't been re-sourced yet (e.g. just after
+        # apply, before the user starts a new login shell).
+        raw = _read_envedit_vars()
+        raw.update(os.environ)
         return {k: v for k, v in raw.items() if k not in _PATH_KEYS}
 
     def get_system_vars(self) -> dict[str, str]:
@@ -79,7 +81,13 @@ class UnixBackend(EnvBackend):
         return {k: v for k, v in raw.items() if k not in _PATH_KEYS}
 
     def get_user_path(self) -> list[str]:
-        path_str = os.environ.get("PATH", "")
+        # Return only what EnvEdit's managed file contributes — never the
+        # merged session PATH. Reading the merged PATH would (a) clone the
+        # entire system PATH on first apply, and (b) silently revert the
+        # user's edits on the post-apply reload (since os.environ won't
+        # change until the next login).
+        envedit_vars = _read_envedit_vars()
+        path_str = envedit_vars.get("PATH", "")
         return [p for p in path_str.split(os.pathsep) if p]
 
     def get_system_path(self) -> list[str]:
@@ -101,16 +109,21 @@ class UnixBackend(EnvBackend):
         _ensure_sourced_in_profile()
 
     def apply_system_vars(self, changes: dict[str, str | None]) -> None:
+        # Write to /etc/profile.d/envedit.sh rather than /etc/environment.
+        # /etc/environment is co-managed (cloud-init, distro packages, PAM
+        # comments) and parsing/rewriting it loses foreign content. The
+        # profile.d file is something we own end-to-end and can safely
+        # rewrite using the same escape-aware writer used for user vars.
         existing: dict[str, str] = {}
-        if _SYSTEM_ENV.is_file():
-            existing = _parse_shell_assigns(_SYSTEM_ENV.read_text(errors="replace"))
+        if _SYSTEM_PROFILE_D.is_file():
+            existing = _parse_shell_assigns(_SYSTEM_PROFILE_D.read_text(errors="replace"))
         for key, val in changes.items():
             if val is None:
                 existing.pop(key, None)
             else:
                 existing[key] = val
-        content = "\n".join(f'{k}="{v}"' for k, v in sorted(existing.items())) + "\n"
-        _write_as_root(_SYSTEM_ENV, content)
+        content = _format_env_sh(existing)
+        _write_as_root(_SYSTEM_PROFILE_D, content)
 
     def apply_user_path(self, entries: list[str]) -> None:
         self.apply_user_vars({"PATH": os.pathsep.join(entries)})
@@ -122,22 +135,47 @@ class UnixBackend(EnvBackend):
         return os.path.expandvars(value)
 
 
-def _write_env_sh(path: Path, vars_: dict[str, str]) -> None:
+def _format_env_sh(vars_: dict[str, str]) -> str:
     lines = ["# Managed by EnvEdit — do not edit manually\n"]
     for k, v in sorted(vars_.items()):
         escaped = v.replace("\\", "\\\\").replace('"', '\\"')
         lines.append(f'export {k}="{escaped}"\n')
-    path.write_text("".join(lines))
+    return "".join(lines)
+
+
+def _write_env_sh(path: Path, vars_: dict[str, str]) -> None:
+    # Write to a sibling temp file then os.replace() — a single rename(2)
+    # syscall is atomic on POSIX, so a kill/OOM mid-write can't leave the
+    # active env.sh truncated. Same-directory temp guarantees same filesystem.
+    content = _format_env_sh(vars_)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content)
+    os.replace(tmp, path)
+
+
+def _login_profile() -> Path:
+    # Bash reads ~/.bash_profile (or ~/.bash_login) instead of ~/.profile when
+    # either exists, so we must write into the file the user's login shell will
+    # actually source. Many distros ship a default ~/.bash_profile.
+    home = Path.home()
+    for name in (".bash_profile", ".bash_login", ".profile"):
+        p = home / name
+        if p.exists():
+            return p
+    return home / ".profile"
 
 
 def _ensure_sourced_in_profile() -> None:
-    profile = Path.home() / ".profile"
-    source_line = f'\n[ -f "{_ENVEDIT_SH}" ] && . "{_ENVEDIT_SH}"\n'
+    profile = _login_profile()
+    guard = f'[ -f "{_ENVEDIT_SH}" ] && . "{_ENVEDIT_SH}"'
+    source_line = f'\n{guard}\n'
     if not profile.is_file():
         profile.write_text(source_line)
         return
     content = profile.read_text(errors="replace")
-    if str(_ENVEDIT_SH) not in content:
+    # Match on the full functional guard, not just the path — a commented-out
+    # source line should not suppress re-insertion.
+    if guard not in content:
         with profile.open("a") as f:
             f.write(source_line)
 

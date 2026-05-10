@@ -29,6 +29,12 @@ class TestStatusHelper:
         f.write_text("x")
         assert _status(str(f)) == "⚠"
 
+    def test_broken_symlink(self, tmp_path):
+        target = tmp_path / "gone"
+        link = tmp_path / "link"
+        link.symlink_to(target)  # target does not exist
+        assert _status(str(link)) == "⚠"
+
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -79,6 +85,7 @@ class TestLoadData:
         assert b"status" in roles.values()
         assert b"isPending" in roles.values()
         assert b"isDuplicate" in roles.values()
+        assert b"isDeleted" in roles.values()
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +185,16 @@ class TestEditEntry:
         populated_model.editEntry(0, "/usr/bin")
         idx = populated_model.index(0)
         assert populated_model.data(idx, PathModel.PendingRole) is False
+        # Regression for issue #001: model-level pendingCount must also clear
+        # so the Apply button doesn't stay enabled after a full revert.
+        assert populated_model.pendingCount == 0
+
+    def test_partial_revert_keeps_pending_count_accurate(self, populated_model):
+        populated_model.editEntry(0, "/changed-0")
+        populated_model.editEntry(1, "/changed-1")
+        populated_model.editEntry(0, "/usr/bin")  # revert first edit
+        # One edit still outstanding; count must reflect it
+        assert populated_model.pendingCount == 1
 
 
 # ---------------------------------------------------------------------------
@@ -185,10 +202,20 @@ class TestEditEntry:
 # ---------------------------------------------------------------------------
 
 class TestDeleteEntry:
-    def test_delete_decreases_row_count(self, populated_model):
+    def test_delete_keeps_row_visible(self, populated_model):
         before = populated_model.rowCount()
         populated_model.deleteEntry(0)
-        assert populated_model.rowCount() == before - 1
+        assert populated_model.rowCount() == before
+
+    def test_delete_marks_row_as_deleted(self, populated_model):
+        populated_model.deleteEntry(0)
+        idx = populated_model.index(0)
+        assert populated_model.data(idx, PathModel.DeletedRole) is True
+
+    def test_deleted_row_is_pending(self, populated_model):
+        populated_model.deleteEntry(0)
+        idx = populated_model.index(0)
+        assert populated_model.data(idx, PathModel.PendingRole) is True
 
     def test_delete_marks_dirty(self, populated_model):
         populated_model.deleteEntry(0)
@@ -198,15 +225,19 @@ class TestDeleteEntry:
         populated_model.deleteEntry(0)
         assert "/usr/bin" not in populated_model.getEntries()
 
-    def test_delete_out_of_range_is_noop(self, populated_model):
+    def test_delete_new_entry_removes_row_immediately(self, populated_model):
         before = populated_model.rowCount()
-        populated_model.deleteEntry(999)
+        populated_model.addEntry("/new/path")
+        populated_model.deleteEntry(populated_model.rowCount() - 1)
         assert populated_model.rowCount() == before
 
+    def test_delete_out_of_range_is_noop(self, populated_model):
+        populated_model.deleteEntry(999)
+        assert populated_model.pendingCount == 0
+
     def test_delete_negative_index_is_noop(self, populated_model):
-        before = populated_model.rowCount()
         populated_model.deleteEntry(-1)
-        assert populated_model.rowCount() == before
+        assert populated_model.pendingCount == 0
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +301,21 @@ class TestMoveEntry:
         original = populated_model.getEntries()
         populated_model.moveEntry(0, 999)
         assert populated_model.getEntries() == original
+
+    def test_move_entry_forward_lands_at_dst(self, qapp):
+        # Forward drag of A onto C's row pushes C up: A lands at index 2.
+        # This matches the QML drop-indicator (drawn at the bottom of the
+        # target row when dragging downward).
+        m = PathModel()
+        m.loadData(["A", "B", "C", "D"])
+        m.moveEntry(0, 2)
+        assert m.getEntries() == ["B", "C", "A", "D"]
+
+    def test_move_entry_backward_lands_at_dst(self, qapp):
+        m = PathModel()
+        m.loadData(["A", "B", "C", "D"])
+        m.moveEntry(2, 0)
+        assert m.getEntries() == ["C", "A", "B", "D"]
 
 
 # ---------------------------------------------------------------------------
@@ -338,6 +384,15 @@ class TestFilter:
         populated_model.setFilter("zzznomatch")
         assert populated_model.pendingCount == 1
 
+    def test_move_blocked_while_filtered(self, populated_model):
+        original = populated_model.getEntries()
+        populated_model.setFilter("usr")
+        populated_model.moveUp(1)
+        populated_model.moveDown(0)
+        populated_model.moveEntry(0, 1)
+        assert populated_model.getEntries() == original
+        assert populated_model.filterActive is True
+
 
 # ---------------------------------------------------------------------------
 # discardChanges
@@ -361,10 +416,11 @@ class TestDiscardChanges:
         assert populated_model.getEntries()[0] == "/usr/bin"
 
     def test_discard_restores_deleted_entries(self, populated_model):
-        before = populated_model.rowCount()
         populated_model.deleteEntry(0)
         populated_model.discardChanges()
-        assert populated_model.rowCount() == before
+        idx = populated_model.index(0)
+        assert populated_model.data(idx, PathModel.DeletedRole) is False
+        assert populated_model.pendingCount == 0
 
     def test_discard_restores_original_order(self, populated_model):
         original = populated_model.getEntries()

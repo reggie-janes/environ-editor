@@ -74,7 +74,14 @@ class WindowsBackend(EnvBackend):
     def expand_value(self, value: str) -> str:
         import ctypes
         buf = ctypes.create_unicode_buffer(32767)
-        ctypes.windll.kernel32.ExpandEnvironmentStringsW(value, buf, 32767)
+        # ExpandEnvironmentStringsW returns 0 on failure or the required buffer
+        # size (incl. NUL) on success. If it would overflow the buffer it
+        # returns a value > 32767 — also treat that as a failure rather than
+        # show a silently truncated string. In both cases fall back to the raw
+        # input so the user sees something meaningful in the Expanded column.
+        result = ctypes.windll.kernel32.ExpandEnvironmentStringsW(value, buf, 32767)
+        if result == 0 or result > 32767:
+            return value
         return buf.value
 
     def _read_hkcu(self) -> dict[str, str]:
@@ -105,11 +112,25 @@ class WindowsBackend(EnvBackend):
     @staticmethod
     def _broadcast_change() -> None:
         import ctypes
+        from ctypes import wintypes
         HWND_BROADCAST = 0xFFFF
         WM_SETTINGCHANGE = 0x001A
         SMTO_ABORTIFHUNG = 0x0002
-        result = ctypes.c_long()
-        ctypes.windll.user32.SendMessageTimeoutW(
+
+        # SendMessageTimeoutW's lpdwResult is PDWORD_PTR — pointer-sized
+        # (4 bytes on Win32, 8 bytes on Win64). c_size_t matches that.
+        # Without explicit argtypes/restype ctypes assumes 32-bit C int,
+        # which corrupts the stack when the kernel writes 8 bytes back
+        # into a 4-byte buffer.
+        SendMessageTimeoutW = ctypes.windll.user32.SendMessageTimeoutW
+        SendMessageTimeoutW.argtypes = [
+            wintypes.HWND, wintypes.UINT, wintypes.WPARAM, ctypes.c_wchar_p,
+            wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t),
+        ]
+        SendMessageTimeoutW.restype = ctypes.c_ssize_t
+
+        result = ctypes.c_size_t()
+        SendMessageTimeoutW(
             HWND_BROADCAST, WM_SETTINGCHANGE, 0, "Environment",
             SMTO_ABORTIFHUNG, 5000, ctypes.byref(result),
         )

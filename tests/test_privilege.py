@@ -50,7 +50,7 @@ class TestRequestElevationAndApply:
             result = request_elevation_and_apply({"system_vars": {}})
         assert result is False
 
-    def test_passes_json_payload_as_argument(self):
+    def test_passes_json_payload_via_temp_file(self, tmp_path):
         import json
         captured_cmd = []
         def fake_run(cmd, **kwargs):
@@ -62,7 +62,12 @@ class TestRequestElevationAndApply:
              patch("subprocess.run", side_effect=fake_run):
             request_elevation_and_apply({"system_vars": {"KEY": "val"}})
 
-        # The last argument should be a JSON string containing our payload
-        payload_str = captured_cmd[-1]
-        payload = json.loads(payload_str)
+        # The CLI should pass a path argument after --apply-system-file
+        assert "--apply-system-file" in captured_cmd
+        path_arg = captured_cmd[captured_cmd.index("--apply-system-file") + 1]
+        # File still exists at this point (the elevated child is responsible
+        # for unlinking it; the fake never ran the child).
+        with open(path_arg) as f:
+            payload = json.load(f)
         assert payload["system_vars"]["KEY"] == "val"
+        os.unlink(path_arg)

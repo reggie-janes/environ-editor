@@ -2,7 +2,10 @@ pragma Singleton
 import QtQuick
 
 QtObject {
-    readonly property bool isDark: appController && appController.theme === "dark"
+    // Set by main.qml from appController.theme. Kept off the singleton's
+    // implicit context lookup (which fails on early evaluation and causes a
+    // light-to-dark flash on launch in dark mode).
+    property bool isDark: false
 
     // Palette — 7 colors, each with dark / light variant
     readonly property color surface:       isDark ? "#1c1c2e" : "#f5f6fa"

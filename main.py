@@ -1,3 +1,5 @@
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -5,8 +7,45 @@ ASSETS  = Path(__file__).parent / "assets"
 QML_DIR = Path(__file__).parent / "envedit" / "qml"
 
 
+def _apply_system_payload(payload: dict) -> int:
+    from envedit.core.env_backend import get_backend
+    backend = get_backend()
+    if "system_vars" in payload:
+        backend.apply_system_vars(payload["system_vars"])
+    if "system_path" in payload:
+        backend.apply_system_path(payload["system_path"])
+    return 0
+
+
+def _maybe_run_elevated_apply() -> bool:
+    """If invoked with --apply-system-file <path>, perform the apply and exit.
+
+    Returns True if the flag was handled (caller should exit), False otherwise.
+    """
+    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-system-file":
+        payload_path = sys.argv[2]
+        try:
+            with open(payload_path, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception as exc:
+            print(f"envedit: failed to read payload: {exc}", file=sys.stderr)
+            try:
+                os.unlink(payload_path)
+            except OSError:
+                pass
+            sys.exit(1)
+        try:
+            os.unlink(payload_path)
+        except OSError:
+            pass
+        sys.exit(_apply_system_payload(payload))
+    return False
+
+
 def main() -> None:
-    from PySide6.QtGui import QGuiApplication, QIcon, QFontDatabase, QFont
+    _maybe_run_elevated_apply()
+
+    from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
 
     app = QGuiApplication(sys.argv)

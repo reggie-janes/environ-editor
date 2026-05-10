@@ -119,6 +119,16 @@ class TestEditVariable:
         pending = populated_model.getPendingChanges()
         assert pending.get("ALPHA") is None  # None = delete
 
+    def test_rename_to_existing_name_is_rejected(self, populated_model, qtbot):
+        # ALPHA exists at index 0, BETA at index 1. Renaming ALPHA to BETA
+        # would silently clobber BETA's value — refuse and emit an error.
+        with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
+            populated_model.editVariable(0, "BETA", "aval")
+        assert populated_model.pendingCount == 0
+        # BETA's original value must not have been touched.
+        beta_row = next(r for r in populated_model._rows if r["name"] == "BETA")
+        assert beta_row["value"] == "bval"
+
     def test_out_of_range_edit_is_noop(self, populated_model):
         populated_model.editVariable(999, "X", "val")
         assert populated_model.pendingCount == 0

@@ -23,7 +23,7 @@ Dialog {
 
     Platform.FolderDialog {
         id: folderDialog
-        onAccepted: pathField.text = folderDialog.folder.toString().replace("file:///", "").replace("file://", "/")
+        onAccepted: pathField.text = Qt.urlToLocalFile(folderDialog.folder)
     }
 
     ColumnLayout {
@@ -54,9 +54,8 @@ Dialog {
             opacity: 0.7
 
             function update(path) {
+                if (!path) { statusText.text = ""; return }
                 const expanded = appController.expandValue(path)
-                const result = appController.expandValue(path)
-                // Status is computed server-side via model roles; show expanded path here
                 statusText.text = expanded !== path ? "→ " + expanded : ""
             }
         }

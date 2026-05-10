@@ -5,7 +5,6 @@ import platform
 import sys
 
 from PySide6.QtCore import QObject, QSettings, Property, Signal, Slot
-from PySide6.QtWidgets import QMessageBox
 
 from envedit.core.env_backend import EnvBackend, get_backend
 from envedit.core.privilege import is_elevated
@@ -27,6 +26,10 @@ class AppController(QObject):
         self._system_var_model = EnvVarModel(expand_fn=expand)
         self._user_path_model  = PathModel(expand_fn=expand)
         self._system_path_model = PathModel(expand_fn=expand)
+
+        # Forward model-level errors (e.g. rename collisions) to the UI.
+        for m in (self._user_var_model, self._system_var_model):
+            m.errorOccurred.connect(self.errorOccurred)
 
         self._load_all()
 
@@ -126,19 +129,15 @@ class AppController(QObject):
         try:
             if idx == 0:
                 self._backend.apply_user_vars(self._user_var_model.getPendingChanges())
-                self._user_var_model.discardChanges()
                 self._reload(0)
             elif idx == 1:
                 self._backend.apply_user_path(self._user_path_model.getEntries())
-                self._user_path_model.discardChanges()
                 self._reload(1)
             elif idx == 2:
                 self._backend.apply_system_vars(self._system_var_model.getPendingChanges())
-                self._system_var_model.discardChanges()
                 self._reload(2)
             elif idx == 3:
                 self._backend.apply_system_path(self._system_path_model.getEntries())
-                self._system_path_model.discardChanges()
                 self._reload(3)
         except Exception as exc:
             self.errorOccurred.emit(str(exc))

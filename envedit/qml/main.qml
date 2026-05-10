@@ -14,9 +14,20 @@ ApplicationWindow {
     Material.accent:  Theme.accent
     Material.primary: Theme.isDark ? Theme.surfaceHigh : Theme.accent
 
+    // Bind Theme.isDark from the controller. The Theme singleton no longer
+    // dereferences appController itself — that lookup fails on first
+    // evaluation and produces a light-to-dark flash on launch in dark mode.
+    Connections {
+        target: appController
+        function onThemeChanged() {
+            Theme.isDark = (appController.theme === "dark")
+        }
+    }
+
     // ------------------------------------------------------------------ geometry
 
     Component.onCompleted: {
+        Theme.isDark = (appController.theme === "dark")
         const geo = appController.loadWindowGeometry()
         window.x = geo[0]; window.y = geo[1]
         window.width = geo[2]; window.height = geo[3]

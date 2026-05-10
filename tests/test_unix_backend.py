@@ -110,22 +110,38 @@ class TestEnsureSourcedInProfile:
 # ---------------------------------------------------------------------------
 
 class TestUnixBackendPath:
-    def test_get_user_path_splits_on_pathsep(self):
+    def test_get_user_path_splits_on_pathsep(self, tmp_path):
+        envedit_sh = tmp_path / "env.sh"
+        _write_env_sh(envedit_sh, {"PATH": "/usr/bin:/bin:/usr/local/bin"})
         backend = UnixBackend()
-        with patch.dict(os.environ, {"PATH": "/usr/bin:/bin:/usr/local/bin"}, clear=False):
+        with patch("envedit.core.platform_unix._ENVEDIT_SH", envedit_sh):
             result = backend.get_user_path()
         assert "/usr/bin" in result
         assert "/bin" in result
 
-    def test_get_user_path_empty_segments_removed(self):
+    def test_get_user_path_empty_segments_removed(self, tmp_path):
+        envedit_sh = tmp_path / "env.sh"
+        _write_env_sh(envedit_sh, {"PATH": "/usr/bin::/bin"})
         backend = UnixBackend()
-        with patch.dict(os.environ, {"PATH": "/usr/bin::/bin"}, clear=False):
+        with patch("envedit.core.platform_unix._ENVEDIT_SH", envedit_sh):
             result = backend.get_user_path()
         assert "" not in result
 
-    def test_get_user_path_empty_PATH(self):
+    def test_get_user_path_empty_when_no_file(self, tmp_path):
         backend = UnixBackend()
-        with patch.dict(os.environ, {"PATH": ""}, clear=False):
+        with patch("envedit.core.platform_unix._ENVEDIT_SH", tmp_path / "missing.sh"):
+            result = backend.get_user_path()
+        assert result == []
+
+    def test_get_user_path_does_not_clone_session_PATH(self, tmp_path):
+        # When env.sh has no PATH, get_user_path should return [] even if
+        # os.environ['PATH'] is rich. Otherwise the first apply would clone
+        # the entire merged session PATH into our managed file.
+        envedit_sh = tmp_path / "env.sh"
+        _write_env_sh(envedit_sh, {"FOO": "bar"})  # no PATH key
+        backend = UnixBackend()
+        with patch("envedit.core.platform_unix._ENVEDIT_SH", envedit_sh), \
+             patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}, clear=False):
             result = backend.get_user_path()
         assert result == []
 
@@ -148,10 +164,19 @@ class TestUnixBackendVars:
     def test_get_user_vars_excludes_PATH(self):
         backend = UnixBackend()
         with patch.dict(os.environ, {"PATH": "/usr/bin", "MYVAR": "hello"}, clear=False):
-            with patch("envedit.core.platform_unix._read_user_shell_vars", return_value={}):
+            with patch("envedit.core.platform_unix._read_envedit_vars", return_value={}):
                 result = backend.get_user_vars()
         assert "PATH" not in result
         assert "MYVAR" in result
+
+    def test_get_user_vars_environ_wins_over_file(self, tmp_path):
+        envedit_sh = tmp_path / "env.sh"
+        _write_env_sh(envedit_sh, {"COLLIDE": "from_file"})
+        backend = UnixBackend()
+        with patch("envedit.core.platform_unix._ENVEDIT_SH", envedit_sh), \
+             patch.dict(os.environ, {"COLLIDE": "from_environ"}, clear=False):
+            result = backend.get_user_vars()
+        assert result["COLLIDE"] == "from_environ"
 
     def test_get_user_vars_merges_shell_file(self, tmp_path):
         envedit_sh = tmp_path / "env.sh"
