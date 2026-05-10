@@ -248,7 +248,7 @@ Item {
                 Menu {
                     id: rowMenu
                     MenuItem {
-                        text: rowBg.clickedColumn === 0 ? "Copy Path Entry" : "Copy Expanded Path Entry"
+                        text: rowBg.clickedColumn === 0 ? "Copy Path" : "Copy Expanded Path"
                         font.pixelSize: 13
                         implicitHeight: 36
                         topPadding: 6
