@@ -31,13 +31,24 @@ def _write_payload_file(changes: dict) -> str:
     return path
 
 
-def request_elevation_and_apply(changes: dict, on_complete: Callable[[], None] | None = None) -> bool:
+def request_elevation_and_apply(changes: dict, on_complete: Callable[..., None] | None = None) -> bool:
     """
     Relaunch the process with elevated privileges, passing changes via a temp
-    JSON file. Returns True if the elevated process was launched, False on cancel.
+    JSON file.
 
-    If on_complete is provided, it is called from a background thread once the
-    elevated child process exits (Windows only; Unix applies synchronously).
+    Return value:
+      * Windows — True once the elevated child has been *launched*. The child
+        may still be running; `on_complete(timed_out=<bool>)` fires from a
+        background thread when it exits.
+      * macOS / Linux — True once the elevated child has *finished*. The call
+        blocks for the duration of the child. `on_complete` is **not**
+        invoked; callers detect completion from the return value.
+      * Any platform — False if the user cancelled the elevation prompt or
+        the launch failed.
+
+    Callers that need a uniform completion signal must therefore branch on
+    the return value (sync=True means done; async=True means in-flight, wait
+    for `on_complete`).
     """
     payload_path = _write_payload_file(changes)
 
