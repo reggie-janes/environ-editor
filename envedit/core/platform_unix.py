@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from envedit.core.env_backend import EnvBackend
+from envedit.core.privilege import is_elevated
 
 _ENVEDIT_SH = Path.home() / ".config" / "envedit" / "env.sh"
 _SYSTEM_ENV = Path("/etc/environment")
@@ -190,6 +191,17 @@ def _ensure_sourced_in_profile() -> None:
 
 def _write_as_root(path: Path, content: str) -> None:
     import tempfile, shutil
+
+    if is_elevated():
+        # Already root — write directly. Skipping pkexec/sudo/osascript also
+        # avoids the spurious GUI password prompt on macOS, where osascript
+        # asks for a password even when uid is already 0.
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(content)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+        return
+
     with tempfile.NamedTemporaryFile("w", suffix=".tmp", delete=False) as tmp:
         tmp.write(content)
         tmp_path = tmp.name

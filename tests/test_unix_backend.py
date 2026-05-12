@@ -9,6 +9,7 @@ import pytest
 from envedit.core.platform_unix import (
     UnixBackend,
     _write_env_sh,
+    _write_as_root,
     _ensure_sourced_in_profile,
     _parse_shell_assigns,
     _ENVEDIT_SH,
@@ -64,6 +65,46 @@ class TestWriteEnvSh:
         assert "Managed by EnvEdit" in content
         # No export lines
         assert "export" not in content
+
+
+# ---------------------------------------------------------------------------
+# _write_as_root
+# ---------------------------------------------------------------------------
+
+class TestWriteAsRoot:
+    def test_elevated_writes_directly_without_subprocess(self, tmp_path):
+        dest = tmp_path / "envedit.sh"
+        with patch("envedit.core.platform_unix.is_elevated", return_value=True), \
+             patch("envedit.core.platform_unix.subprocess.run") as run:
+            _write_as_root(dest, "payload\n")
+        assert dest.read_text() == "payload\n"
+        run.assert_not_called()
+
+    def test_elevated_sets_mode_644(self, tmp_path):
+        dest = tmp_path / "envedit.sh"
+        with patch("envedit.core.platform_unix.is_elevated", return_value=True):
+            _write_as_root(dest, "payload\n")
+        # Lower 9 mode bits should be rw-r--r-- regardless of umask.
+        assert (dest.stat().st_mode & 0o777) == 0o644
+
+    def test_elevated_overwrites_existing(self, tmp_path):
+        dest = tmp_path / "envedit.sh"
+        dest.write_text("old\n")
+        with patch("envedit.core.platform_unix.is_elevated", return_value=True):
+            _write_as_root(dest, "new\n")
+        assert dest.read_text() == "new\n"
+
+    def test_unelevated_invokes_helper(self, tmp_path):
+        dest = tmp_path / "envedit.sh"
+        with patch("envedit.core.platform_unix.is_elevated", return_value=False), \
+             patch("envedit.core.platform_unix.sys.platform", "linux"), \
+             patch("shutil.which", return_value="/usr/bin/pkexec"), \
+             patch("envedit.core.platform_unix.subprocess.run") as run:
+            _write_as_root(dest, "payload\n")
+        run.assert_called_once()
+        argv = run.call_args.args[0]
+        assert argv[0] == "pkexec"
+        assert "install" in argv
 
 
 # ---------------------------------------------------------------------------
