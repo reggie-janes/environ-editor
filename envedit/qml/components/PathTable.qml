@@ -8,6 +8,9 @@ Item {
     property bool isSystem: false
     property int tabIndex: 1
 
+    readonly property bool isReadOnly:
+        !isSystem && appController && appController.userTabsReadOnly
+
     readonly property int colIdx:      40
     readonly property int colStatus:   52
     readonly property int scrollBarWidth: 12
@@ -155,7 +158,7 @@ Item {
                         DragHandler {
                             target: null
                             cursorShape: Qt.ClosedHandCursor
-                            enabled: !root.model.filterActive
+                            enabled: !root.model.filterActive && !root.isReadOnly
                             onActiveChanged: {
                                 var lv = rowBg.lv
                                 if (!lv) return
@@ -188,6 +191,7 @@ Item {
                         width: root.colPath
                         height: parent.height
                         text: model.path
+                        readOnly: root.isReadOnly
                         color: model.isDeleted ? Theme.colorNegative : Theme.textNormal
                         font.family: "Roboto Mono"
                         font.pixelSize: 13
@@ -289,7 +293,7 @@ Item {
                         icon.height: 20
                         // Reordering while filtered crosses invisible rows;
                         // disable to avoid surprising the user.
-                        enabled: !root.model.filterActive
+                        enabled: !root.model.filterActive && !root.isReadOnly
                         onTriggered: root.model.moveUp(index)
                     }
                     MenuItem {
@@ -302,7 +306,7 @@ Item {
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
-                        enabled: !root.model.filterActive
+                        enabled: !root.model.filterActive && !root.isReadOnly
                         onTriggered: root.model.moveDown(index)
                     }
                     MenuSeparator {}
@@ -312,6 +316,7 @@ Item {
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
+                        enabled: !root.isReadOnly
                         icon.source: model.isDeleted ? "../../../assets/icons/restore.svg"
                                                      : "../../../assets/icons/delete.svg"
                         icon.color: Theme.textNormal

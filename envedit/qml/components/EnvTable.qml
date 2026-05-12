@@ -8,6 +8,9 @@ Item {
     property bool isSystem: false
     property int tabIndex: 0
 
+    readonly property bool isReadOnly:
+        !isSystem && appController && appController.userTabsReadOnly
+
     readonly property int colName:     200
     readonly property int colExpanded: (width - colName - scrollBarWidth) / 2
     readonly property int colValue:    colExpanded
@@ -147,6 +150,7 @@ Item {
                         width: root.colName
                         height: parent.height
                         text: model.name
+                        readOnly: root.isReadOnly
                         color: model.isDeleted ? Theme.colorNegative : Theme.textNormal
                         font.family: "Roboto Mono"
                         font.pixelSize: 13
@@ -168,6 +172,7 @@ Item {
                         width: root.colValue
                         height: parent.height
                         text: model.value
+                        readOnly: root.isReadOnly
                         color: model.isDeleted ? Theme.colorNegative : Theme.textNormal
                         font.family: "Roboto Mono"
                         font.pixelSize: 13
@@ -238,6 +243,7 @@ Item {
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
+                        enabled: !root.isReadOnly
                         icon.source: model.isDeleted ? "../../../assets/icons/restore.svg"
                                                      : "../../../assets/icons/delete.svg"
                         icon.color: Theme.textNormal

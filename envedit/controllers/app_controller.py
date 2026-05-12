@@ -7,7 +7,7 @@ import sys
 from PySide6.QtCore import QObject, QSettings, Property, Signal, Slot
 
 from envedit.core.env_backend import EnvBackend, get_backend
-from envedit.core.privilege import is_elevated
+from envedit.core.privilege import is_elevated, is_elevated_via_wrapper
 from envedit.models.env_var_model import EnvVarModel
 from envedit.models.path_model import PathModel
 
@@ -60,6 +60,13 @@ class AppController(QObject):
     @Property(bool, constant=True)
     def isElevated(self) -> bool:
         return is_elevated()
+
+    @Property(bool, constant=True)
+    def userTabsReadOnly(self) -> bool:
+        # When launched via sudo/pkexec, $HOME points to /root; user-tab
+        # writes would corrupt root's account instead of the invoking user's.
+        # The UI uses this to lock the user tabs and surface a banner.
+        return is_elevated_via_wrapper()
 
     @Property(bool, notify=isBusyChanged)
     def isBusy(self) -> bool:
@@ -135,6 +142,12 @@ class AppController(QObject):
     @Slot(int)
     def applyTab(self, idx: int) -> None:
         try:
+            if idx in (0, 1) and is_elevated_via_wrapper():
+                self.errorOccurred.emit(
+                    "User variables can't be edited when EnvEdit is running "
+                    "with elevated privileges. Restart as your normal user."
+                )
+                return
             if idx == 0:
                 self._backend.apply_user_vars(self._user_var_model.getPendingChanges())
                 self._reload(0)

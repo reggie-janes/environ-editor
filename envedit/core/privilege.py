@@ -16,6 +16,29 @@ def is_elevated() -> bool:
     return os.getuid() == 0
 
 
+def is_elevated_via_wrapper() -> bool:
+    """True iff the process is running elevated through a privilege-escalation
+    wrapper (sudo / pkexec / su), as opposed to being a genuine root session.
+
+    The distinction matters for user-scoped writes: when launched via a
+    wrapper, $HOME points to root and any "user" write would corrupt /root
+    instead of the invoking user's account. When the process is genuinely
+    root (e.g. a root login on a headless server) there is no invoking user
+    and /root is the correct destination.
+
+    Detection is via the env vars the wrappers set on the elevated child:
+    SUDO_USER / SUDO_UID (sudo) and PKEXEC_UID (pkexec). Returns False on
+    Windows — UAC doesn't switch user identity, so the pattern doesn't apply.
+    """
+    if not is_elevated() or sys.platform == "win32":
+        return False
+    return bool(
+        os.environ.get("SUDO_USER")
+        or os.environ.get("SUDO_UID")
+        or os.environ.get("PKEXEC_UID")
+    )
+
+
 def _write_payload_file(changes: dict) -> str:
     """Serialise the payload to a temp JSON file. The elevated child unlinks it."""
     fd, path = tempfile.mkstemp(prefix="envedit-apply-", suffix=".json")

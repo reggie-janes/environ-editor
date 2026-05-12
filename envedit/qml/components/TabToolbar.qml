@@ -10,6 +10,11 @@ ToolBar {
     property bool isPath: false
     property bool isSystem: false
 
+    // True when this is a user tab and the app is running under sudo/pkexec —
+    // edits would land in /root, so the tab is locked read-only.
+    readonly property bool userTabLocked:
+        !root.isSystem && appController && appController.userTabsReadOnly
+
     signal addClicked()
     signal reloadClicked()
     signal applyClicked()
@@ -29,6 +34,7 @@ ToolBar {
             text: "+ Add"
             flat: true
             font.pixelSize: 13
+            enabled: !root.userTabLocked
             onClicked: root.addClicked()
         }
 
@@ -44,6 +50,7 @@ ToolBar {
             font.pixelSize: 13
             enabled: root.model && root.model.pendingCount > 0
                      && !(root.isSystem && appController && appController.isBusy)
+                     && !root.userTabLocked
             Material.background: enabled ? Theme.accent : undefined
             Material.foreground: enabled ? Theme.surface : undefined
             onClicked: root.applyClicked()
@@ -55,6 +62,13 @@ ToolBar {
             font.pixelSize: 12
             visible: root.isSystem && !(appController && appController.isElevated)
                      && !(appController && appController.isBusy)
+        }
+
+        Text {
+            text: "⚠ Locked — restart as your normal user to edit"
+            color: Theme.colorNegative
+            font.pixelSize: 12
+            visible: root.userTabLocked
         }
 
         BusyIndicator {
@@ -73,6 +87,7 @@ ToolBar {
             font.pixelSize: 13
             visible: root.isPath
             enabled: root.model && root.model.hasDuplicates
+                     && !root.userTabLocked
             onClicked: root.removeDuplicatesClicked()
         }
     }

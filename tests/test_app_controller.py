@@ -207,3 +207,48 @@ class TestInfoProperties:
 
     def test_is_elevated_is_bool(self, controller):
         assert isinstance(controller.isElevated, bool)
+
+    def test_user_tabs_read_only_is_bool(self, controller):
+        assert isinstance(controller.userTabsReadOnly, bool)
+
+
+# ---------------------------------------------------------------------------
+# applyTab guards when running elevated-via-wrapper
+# ---------------------------------------------------------------------------
+
+class TestApplyTabUserTabsLocked:
+    def test_user_vars_apply_blocked_when_wrapper_elevated(self, qapp, mock_backend, qtbot):
+        with patch("envedit.controllers.app_controller.get_backend", return_value=mock_backend), \
+             patch("envedit.controllers.app_controller.is_elevated_via_wrapper", return_value=True), \
+             patch("envedit.controllers.app_controller.QSettings") as mock_settings:
+            mock_settings.return_value.value.return_value = ""
+            ctrl = AppController()
+            ctrl.userVarModel.editVariable(0, "BAR", "new_val")
+            with qtbot.waitSignal(ctrl.errorOccurred, timeout=500) as blocker:
+                ctrl.applyTab(0)
+        assert "elevated" in blocker.args[0].lower()
+        mock_backend.apply_user_vars.assert_not_called()
+
+    def test_user_path_apply_blocked_when_wrapper_elevated(self, qapp, mock_backend, qtbot):
+        with patch("envedit.controllers.app_controller.get_backend", return_value=mock_backend), \
+             patch("envedit.controllers.app_controller.is_elevated_via_wrapper", return_value=True), \
+             patch("envedit.controllers.app_controller.QSettings") as mock_settings:
+            mock_settings.return_value.value.return_value = ""
+            ctrl = AppController()
+            ctrl.userPathModel.addEntry("/extra")
+            with qtbot.waitSignal(ctrl.errorOccurred, timeout=500) as blocker:
+                ctrl.applyTab(1)
+        assert "elevated" in blocker.args[0].lower()
+        mock_backend.apply_user_path.assert_not_called()
+
+    def test_system_apply_not_blocked_when_wrapper_elevated(self, qapp, mock_backend):
+        # System tabs are the whole reason someone would launch via sudo —
+        # they must remain functional.
+        with patch("envedit.controllers.app_controller.get_backend", return_value=mock_backend), \
+             patch("envedit.controllers.app_controller.is_elevated_via_wrapper", return_value=True), \
+             patch("envedit.controllers.app_controller.QSettings") as mock_settings:
+            mock_settings.return_value.value.return_value = ""
+            ctrl = AppController()
+            ctrl.systemVarModel.editVariable(0, "SYS_VAR", "new_sys")
+            ctrl.applyTab(2)
+        mock_backend.apply_system_vars.assert_called_once()

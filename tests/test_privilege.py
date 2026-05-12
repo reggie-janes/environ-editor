@@ -4,7 +4,11 @@ import sys
 import pytest
 from unittest.mock import patch, MagicMock
 
-from envedit.core.privilege import is_elevated, request_elevation_and_apply
+from envedit.core.privilege import (
+    is_elevated,
+    is_elevated_via_wrapper,
+    request_elevation_and_apply,
+)
 
 
 class TestIsElevated:
@@ -19,6 +23,44 @@ class TestIsElevated:
     def test_returns_bool(self):
         result = is_elevated()
         assert isinstance(result, bool)
+
+
+class TestIsElevatedViaWrapper:
+    def test_false_when_not_elevated(self):
+        with patch("envedit.core.privilege.is_elevated", return_value=False), \
+             patch.dict(os.environ, {"SUDO_USER": "alice"}, clear=False):
+            assert is_elevated_via_wrapper() is False
+
+    def test_true_when_elevated_and_sudo_user_set(self):
+        with patch("envedit.core.privilege.is_elevated", return_value=True), \
+             patch.object(sys, "platform", "linux"), \
+             patch.dict(os.environ, {"SUDO_USER": "alice"}, clear=False):
+            os.environ.pop("PKEXEC_UID", None)
+            assert is_elevated_via_wrapper() is True
+
+    def test_true_when_elevated_and_pkexec_uid_set(self):
+        with patch("envedit.core.privilege.is_elevated", return_value=True), \
+             patch.object(sys, "platform", "linux"), \
+             patch.dict(os.environ, {"PKEXEC_UID": "1000"}, clear=False):
+            os.environ.pop("SUDO_USER", None)
+            os.environ.pop("SUDO_UID", None)
+            assert is_elevated_via_wrapper() is True
+
+    def test_false_when_elevated_but_no_wrapper_env(self):
+        with patch("envedit.core.privilege.is_elevated", return_value=True), \
+             patch.object(sys, "platform", "linux"), \
+             patch.dict(os.environ, {}, clear=False):
+            for k in ("SUDO_USER", "SUDO_UID", "PKEXEC_UID"):
+                os.environ.pop(k, None)
+            assert is_elevated_via_wrapper() is False
+
+    def test_false_on_windows(self):
+        # Windows UAC doesn't switch user identity, so the wrapper pattern
+        # never applies even if env vars somehow contained these keys.
+        with patch("envedit.core.privilege.is_elevated", return_value=True), \
+             patch.object(sys, "platform", "win32"), \
+             patch.dict(os.environ, {"SUDO_USER": "alice"}, clear=False):
+            assert is_elevated_via_wrapper() is False
 
 
 class TestRequestElevationAndApply:
