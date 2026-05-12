@@ -384,6 +384,13 @@ class TestFilter:
         populated_model.setFilter("zzznomatch")
         assert populated_model.pendingCount == 1
 
+    def test_filter_matches_expanded_path(self, qapp):
+        model = PathModel(expand_fn=lambda v: v.replace("$HOME", "/home/user"))
+        model.loadData(["$HOME/bin", "/usr/bin"])
+        model.setFilter("/home/user")  # only in expanded value — should match
+        assert model.rowCount() == 1
+        assert model.data(model.index(0), PathModel.PathRole) == "$HOME/bin"
+
     def test_move_blocked_while_filtered(self, populated_model):
         original = populated_model.getEntries()
         populated_model.setFilter("usr")

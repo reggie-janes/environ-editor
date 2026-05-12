@@ -238,12 +238,15 @@ class PathModel(QAbstractListModel):
     def _visible(self) -> list[dict]:
         if not self._filter:
             return self._entries
-        return [e for e in self._entries if self._filter in e["path"].lower()]
+        return [e for e in self._entries if self._path_matches(e["path"])]
 
     def _visible_indices(self) -> list[int]:
         if not self._filter:
             return list(range(len(self._entries)))
-        return [i for i, e in enumerate(self._entries) if self._filter in e["path"].lower()]
+        return [i for i, e in enumerate(self._entries) if self._path_matches(e["path"])]
+
+    def _path_matches(self, path: str) -> bool:
+        return self._filter in path.lower() or self._filter in self._expand_fn(path).lower()
 
     def _mark_dirty(self) -> None:
         self._dirty = True

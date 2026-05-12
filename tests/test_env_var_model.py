@@ -264,6 +264,22 @@ class TestFilter:
         populated_model.setFilter("beta")
         assert populated_model.pendingCount == 1
 
+    def test_filter_matches_pending_value(self, populated_model):
+        populated_model.editVariable(0, "ALPHA", "unique_pending")
+        populated_model.setFilter("unique_pending")
+        assert populated_model.rowCount() == 1
+        assert populated_model.data(populated_model.index(0), EnvVarModel.NameRole) == "ALPHA"
+
+    def test_filter_matches_expanded_value(self, qapp):
+        model = EnvVarModel(expand_fn=lambda v: v.replace("$TOKEN", "/resolved/path"))
+        model.loadData({"FOO": "$TOKEN/extra"})
+        model.setFilter("/resolved")  # only in expanded value — should match
+        assert model.rowCount() == 1
+        model.setFilter("token")    # in raw value — should also match
+        assert model.rowCount() == 1
+        model.setFilter("nomatch")
+        assert model.rowCount() == 0
+
 
 # ---------------------------------------------------------------------------
 # getPendingChanges

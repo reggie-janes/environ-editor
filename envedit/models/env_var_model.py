@@ -180,8 +180,14 @@ class EnvVarModel(QAbstractListModel):
     def _visible_rows(self) -> list[dict]:
         if not self._filter:
             return self._rows
-        return [r for r in self._rows
-                if self._filter in r["name"].lower() or self._filter in r["value"].lower()]
+        def _match(r: dict) -> bool:
+            name = r["name"]
+            pv = self._pending.get(name, ...)
+            val = self._pending[name] if (pv is not ... and pv is not None) else r["value"]
+            return (self._filter in name.lower()
+                    or self._filter in val.lower()
+                    or self._filter in self._expand_fn(val).lower())
+        return [r for r in self._rows if _match(r)]
 
     def _stage(self, name: str, value: str) -> None:
         row = self._by_name.get(name)
