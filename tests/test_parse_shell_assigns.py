@@ -104,3 +104,27 @@ def test_value_with_dollar():
 def test_quoted_value_with_dollar():
     result = _parse_shell_assigns('FOO="$HOME/bin"')
     assert result == {"FOO": "$HOME/bin"}
+
+
+def test_double_quoted_unescapes_escaped_quote():
+    # _format_env_sh writes:   export FOO="say \"hi\""
+    # which represents the value:   say "hi"
+    assert _parse_shell_assigns(r'FOO="say \"hi\""') == {"FOO": 'say "hi"'}
+
+
+def test_double_quoted_unescapes_escaped_backslash():
+    # _format_env_sh writes:   export WIN="C:\\Users"
+    # which represents the value:   C:\Users
+    assert _parse_shell_assigns(r'WIN="C:\\Users"') == {"WIN": r"C:\Users"}
+
+
+def test_double_quoted_roundtrip_with_specials():
+    from envedit.core.platform_unix import _format_env_sh
+    original = {"FOO": 'say "hi"', "WIN": r"C:\Users\test", "MIX": r'a\"b'}
+    text = _format_env_sh(original)
+    assert _parse_shell_assigns(text) == original
+
+
+def test_single_quoted_does_not_unescape():
+    # Single-quoted shell strings are literal — \" is two characters, not one.
+    assert _parse_shell_assigns(r"FOO='a\"b'") == {"FOO": r'a\"b'}

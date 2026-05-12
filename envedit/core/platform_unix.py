@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -27,9 +29,14 @@ def _parse_shell_assigns(text: str) -> dict[str, str]:
         m = re.match(r'^([A-Za-z_][A-Za-z0-9_]*)=(.*)$', line)
         if m:
             name, val = m.group(1), m.group(2)
-            # Strip surrounding quotes
-            if (val.startswith('"') and val.endswith('"')) or \
-               (val.startswith("'") and val.endswith("'")):
+            if val.startswith('"') and val.endswith('"'):
+                # Reverse the pair of replacements in _format_env_sh. Order
+                # matters: unescape \" first so a literal trailing backslash
+                # (written as \\) isn't paired up with the following quote
+                # delimiter and consumed early.
+                val = val[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+            elif val.startswith("'") and val.endswith("'"):
+                # Single-quoted shell strings have no escape processing.
                 val = val[1:-1]
             result[name] = val
     return result
@@ -187,10 +194,21 @@ def _write_as_root(path: Path, content: str) -> None:
         tmp.write(content)
         tmp_path = tmp.name
     try:
-        tool = "pkexec" if shutil.which("pkexec") else "sudo"
-        subprocess.run(
-            [tool, "install", "-m", "644", tmp_path, str(path)],
-            check=True,
-        )
+        if sys.platform == "darwin":
+            # pkexec doesn't exist on macOS; sudo without a controlling terminal
+            # fails in a GUI app. osascript with "administrator privileges"
+            # shows the native macOS password sheet.
+            shell_cmd = shlex.join(["install", "-m", "644", tmp_path, str(path)])
+            script = (
+                f"do shell script {json.dumps(shell_cmd)} "
+                f"with administrator privileges"
+            )
+            subprocess.run(["osascript", "-e", script], check=True)
+        else:
+            tool = "pkexec" if shutil.which("pkexec") else "sudo"
+            subprocess.run(
+                [tool, "install", "-m", "644", tmp_path, str(path)],
+                check=True,
+            )
     finally:
         os.unlink(tmp_path)
