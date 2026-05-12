@@ -50,6 +50,10 @@ class PathModel(QAbstractListModel):
     def filterActive(self) -> bool:
         return bool(self._filter)
 
+    @Property(bool, notify=pendingCountChanged)
+    def hasDuplicates(self) -> bool:
+        return any(v > 1 for v in self._dup_counts.values())
+
     # ------------------------------------------------------------------ QAbstractListModel
 
     def rowCount(self, parent=QModelIndex()) -> int:

@@ -33,14 +33,21 @@ ToolBar {
         }
 
         Button {
-            text: "Remove Duplicates"
+            text: "↺  Reload"
             flat: true
             font.pixelSize: 13
-            visible: root.isPath
-            onClicked: root.removeDuplicatesClicked()
+            onClicked: root.reloadClicked()
         }
 
-        Item { Layout.fillWidth: true }
+        Button {
+            text: "✓  Apply Changes"
+            font.pixelSize: 13
+            enabled: root.model && root.model.pendingCount > 0
+                     && !(root.isSystem && appController && appController.isBusy)
+            Material.background: enabled ? Theme.accent : undefined
+            Material.foreground: enabled ? Theme.surface : undefined
+            onClicked: root.applyClicked()
+        }
 
         Text {
             text: "⛨ Elevation required"
@@ -58,21 +65,15 @@ ToolBar {
             padding: 0
         }
 
-        Button {
-            text: "✓  Apply Changes"
-            font.pixelSize: 13
-            enabled: root.model && root.model.pendingCount > 0
-                     && !(root.isSystem && appController && appController.isBusy)
-            Material.background: enabled ? Theme.accent : undefined
-            Material.foreground: enabled ? Theme.surface : undefined
-            onClicked: root.applyClicked()
-        }
+        Item { Layout.fillWidth: true }
 
         Button {
-            text: "↺  Reload"
+            text: "Remove Duplicates"
             flat: true
             font.pixelSize: 13
-            onClicked: root.reloadClicked()
+            visible: root.isPath
+            enabled: root.model && root.model.hasDuplicates
+            onClicked: root.removeDuplicatesClicked()
         }
     }
 }
