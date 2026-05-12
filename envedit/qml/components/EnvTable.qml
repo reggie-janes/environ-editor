@@ -29,7 +29,7 @@ Item {
             model: root.model
             isSystem: root.isSystem
             onAddClicked:    addVarDialog.open()
-            onReloadClicked: { appController.reloadTab(root.tabIndex); root.model.discardChanges() }
+            onReloadClicked: appController.reloadTab(root.tabIndex)
             onApplyClicked: {
                 diffDialog.diffText = appController.getDiffText(root.tabIndex)
                 diffDialog.tabIndex = root.tabIndex

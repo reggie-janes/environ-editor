@@ -31,7 +31,7 @@ Item {
             isSystem: root.isSystem
             onAddClicked:              addPathDialog.open()
             onRemoveDuplicatesClicked: root.model.removeDuplicates()
-            onReloadClicked: { appController.reloadTab(root.tabIndex); root.model.discardChanges() }
+            onReloadClicked: appController.reloadTab(root.tabIndex)
             onApplyClicked: {
                 diffDialog.diffText = appController.getDiffText(root.tabIndex)
                 diffDialog.tabIndex = root.tabIndex
