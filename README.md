@@ -19,7 +19,7 @@ A cross-platform desktop application for viewing and editing environment variabl
 
 | Dependency | Version |
 |-----------|---------|
-| Python | ≥ 3.14 |
+| Python | ≥ 3.10 |
 | PySide6 | ≥ 6.7.0 |
 | uv | any recent |
 
@@ -68,9 +68,9 @@ Output is a single self-contained file (`EnvEdit` / `EnvEdit.exe`). No installer
 
 ### Linux / macOS
 
-- **User variables** are read from the process environment and parsed from `~/.profile`, `~/.bashrc`, `~/.zshrc`.
+- **User variables** are read from the live process environment (`os.environ`) merged with `~/.config/envedit/env.sh`. Arbitrary shell-init scripts (`~/.profile`, `~/.bashrc`, etc.) are not parsed — they contain conditionals and quoting forms that a simple parser cannot represent safely.
 - **Writes** go to `~/.config/envedit/env.sh`, automatically sourced from `~/.profile`. A new login session or `source ~/.profile` is needed to pick up changes in existing shells.
-- **System writes** invoke `pkexec` (or `sudo` as fallback) to write `/etc/environment`.
+- **System writes** invoke `pkexec` (or `sudo` as fallback) to write `/etc/profile.d/envedit.sh`.
 
 ### Windows
 
@@ -114,7 +114,8 @@ envedit/
         ├── AddVarDialog.qml     Add variable dialog with live expansion preview
         ├── AddPathDialog.qml    Add PATH entry dialog with folder browser
         ├── ConfirmDialog.qml    Generic confirmation dialog
-        └── DiffDialog.qml      Pending-changes diff before Apply
+        ├── DiffDialog.qml      Pending-changes diff before Apply
+        └── Theme.qml           Singleton color palette (dark/light semantic colors)
 main.py                          Entry point (QGuiApplication + QQmlApplicationEngine)
 build/                           Nuitka build scripts
 ```
