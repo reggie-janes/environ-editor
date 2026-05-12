@@ -9,13 +9,13 @@ from envedit.core.env_backend import EnvBackend
 
 _PATH_KEYS = {"PATH"}
 _HKCU_ENV = r"Environment"
+_HKLM_ENV = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
 
 
 def _iget(d: dict[str, str], key: str, default: str = "") -> str:
     """Case-insensitive dict get — registry key names are not case-sensitive."""
     key_upper = key.upper()
     return next((v for k, v in d.items() if k.upper() == key_upper), default)
-_HKLM_ENV = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"
 
 
 class WindowsBackend(EnvBackend):
@@ -87,15 +87,16 @@ class WindowsBackend(EnvBackend):
         return buf.value
 
     def _read_hkcu(self) -> dict[str, str]:
-        return self._read_registry_env(r"HKEY_CURRENT_USER", _HKCU_ENV)
+        import winreg
+        return self._read_registry_env(winreg.HKEY_CURRENT_USER, _HKCU_ENV)
 
     def _read_hklm(self) -> dict[str, str]:
-        return self._read_registry_env(r"HKEY_LOCAL_MACHINE", _HKLM_ENV)
+        import winreg
+        return self._read_registry_env(winreg.HKEY_LOCAL_MACHINE, _HKLM_ENV)
 
     @staticmethod
-    def _read_registry_env(hive_name: str, subkey: str) -> dict[str, str]:
+    def _read_registry_env(hive: int, subkey: str) -> dict[str, str]:
         import winreg
-        hive = getattr(winreg, hive_name)
         result: dict[str, str] = {}
         try:
             with winreg.OpenKey(hive, subkey) as key:
