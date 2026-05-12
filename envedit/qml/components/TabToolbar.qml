@@ -86,7 +86,7 @@ ToolBar {
             flat: true
             font.pixelSize: 13
             visible: root.isPath
-            enabled: root.model && root.model.hasDuplicates
+            enabled: root.isPath && root.model && root.model.hasDuplicates === true
                      && !root.userTabLocked
             onClicked: root.removeDuplicatesClicked()
         }
