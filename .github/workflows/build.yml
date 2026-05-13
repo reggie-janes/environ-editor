@@ -1,0 +1,67 @@
+name: Build executables
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            script: build/build_linux.sh
+            artifact_path: EnvEdit
+            artifact_name: EnvEdit-linux
+          - os: windows-latest
+            script: build/build_windows.bat
+            artifact_path: EnvEdit.exe
+            artifact_name: EnvEdit-windows
+          - os: macos-latest
+            script: build/build_macos.sh
+            artifact_path: EnvEdit.app
+            artifact_name: EnvEdit-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt system libraries (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libegl1 libglib2.0-0 libdbus-1-3 libfontconfig1 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies (Nuitka + pytest)
+        run: uv sync --extra build --extra test
+
+      - name: Run tests
+        run: uv run pytest -v
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: uv run bash ${{ matrix.script }}
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: uv run ${{ matrix.script }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
