@@ -1,5 +1,6 @@
 """Tests for UnixBackend and related helpers in platform_unix.py."""
 import os
+import sys
 import textwrap
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -80,6 +81,7 @@ class TestWriteAsRoot:
         assert dest.read_text() == "payload\n"
         run.assert_not_called()
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX mode bits don't apply to Windows ACLs")
     def test_elevated_sets_mode_644(self, tmp_path):
         dest = tmp_path / "envedit.sh"
         with patch("envedit.core.platform_unix.is_elevated", return_value=True):
@@ -198,6 +200,7 @@ class TestEnsureSourcedInProfile:
 # ---------------------------------------------------------------------------
 
 class TestUnixBackendPath:
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.pathsep differs on Windows")
     def test_get_user_path_splits_on_pathsep(self, tmp_path):
         envedit_sh = tmp_path / "env.sh"
         _write_env_sh(envedit_sh, {"PATH": "/usr/bin:/bin:/usr/local/bin"})
@@ -233,6 +236,7 @@ class TestUnixBackendPath:
             result = backend.get_user_path()
         assert result == []
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.pathsep differs on Windows")
     def test_get_system_path_parses_env_file(self, tmp_path):
         env_file = tmp_path / "environment"
         env_file.write_text('PATH="/sysbin:/syslocal"\n')
@@ -353,6 +357,7 @@ class TestUnixBackendApplyUserVars:
 # ---------------------------------------------------------------------------
 
 class TestUnixBackendApplyUserPath:
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.pathsep differs on Windows")
     def test_writes_path_joined_by_pathsep(self, tmp_path):
         envedit_sh = tmp_path / "env.sh"
         backend = UnixBackend()

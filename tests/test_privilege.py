@@ -12,10 +12,12 @@ from envedit.core.privilege import (
 
 
 class TestIsElevated:
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.getuid is Unix-only")
     def test_root_is_elevated(self):
         with patch("os.getuid", return_value=0):
             assert is_elevated() is True
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="os.getuid is Unix-only")
     def test_non_root_is_not_elevated(self):
         with patch("os.getuid", return_value=1000):
             assert is_elevated() is False
