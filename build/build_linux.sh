@@ -5,6 +5,7 @@ python -m nuitka \
   --standalone \
   --onefile \
   --plugin-enable=pyside6 \
+  --include-qt-plugins=qml \
   --linux-icon=assets/environ-editor.ico \
   --include-data-dir=assets=assets \
   --include-data-dir=envedit/qml=qml \

@@ -4,6 +4,7 @@ python -m nuitka ^
   --standalone ^
   --onefile ^
   --plugin-enable=pyside6 ^
+  --include-qt-plugins=qml ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
   --include-data-dir=assets=assets ^
