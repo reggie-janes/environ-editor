@@ -257,7 +257,7 @@ Item {
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
-                        icon.source: "../../../assets/icons/copy.svg"
+                        icon.source: assetsUrl + "/icons/copy.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
@@ -274,7 +274,7 @@ Item {
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
-                        icon.source: "../../../assets/icons/folder.svg"
+                        icon.source: assetsUrl + "/icons/folder.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
@@ -287,7 +287,7 @@ Item {
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
-                        icon.source: "../../../assets/icons/arrow-up.svg"
+                        icon.source: assetsUrl + "/icons/arrow-up.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
@@ -302,7 +302,7 @@ Item {
                         implicitHeight: 36
                         topPadding: 6
                         bottomPadding: 6
-                        icon.source: "../../../assets/icons/arrow-down.svg"
+                        icon.source: assetsUrl + "/icons/arrow-down.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20
@@ -317,8 +317,8 @@ Item {
                         topPadding: 6
                         bottomPadding: 6
                         enabled: !root.isReadOnly
-                        icon.source: model.isDeleted ? "../../../assets/icons/restore.svg"
-                                                     : "../../../assets/icons/delete.svg"
+                        icon.source: model.isDeleted ? assetsUrl + "/icons/restore.svg"
+                                                     : assetsUrl + "/icons/delete.svg"
                         icon.color: Theme.textNormal
                         icon.width: 20
                         icon.height: 20

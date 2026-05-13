@@ -41,6 +41,7 @@ def _maybe_run_elevated_apply() -> bool:
 def main() -> None:
     _maybe_run_elevated_apply()
 
+    from PySide6.QtCore import QUrl
     from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
 
@@ -59,6 +60,9 @@ def main() -> None:
 
     engine = QQmlApplicationEngine()
     engine.rootContext().setContextProperty("appController", controller)
+    engine.rootContext().setContextProperty(
+        "assetsUrl", QUrl.fromLocalFile(str(ASSETS)).toString()
+    )
     engine.addImportPath(str(QML_DIR))          # lets main.qml find components/
     engine.load(str(QML_DIR / "main.qml"))
 

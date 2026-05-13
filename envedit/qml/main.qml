@@ -114,8 +114,8 @@ ApplicationWindow {
             ToolButton {
                 id: themeBtn
                 icon.source: appController && appController.theme === "dark"
-                    ? "../../assets/icons/sun.svg"
-                    : "../../assets/icons/moon.svg"
+                    ? assetsUrl + "/icons/sun.svg"
+                    : assetsUrl + "/icons/moon.svg"
                 icon.color: Theme.isDark ? Theme.textNormal : Theme.surface
                 icon.width: 20
                 icon.height: 20
