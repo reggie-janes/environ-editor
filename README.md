@@ -44,6 +44,8 @@ Headless (no display, for testing):
 QPA_PLATFORM=offscreen uv run python main.py
 ```
 
+> **Windows note:** the system-tab apply elevates by relaunching EnvEdit through UAC using `sys.executable`. When running unpackaged via `uv run`, that interpreter lives inside your user directory and is writable by you. On a single-user machine this is fine; on a shared workstation where another user has write access to your Python interpreter, prefer the packaged Nuitka build (where `sys.executable` is the compiled binary at a fixed, root-owned location) before exercising system-tab Apply.
+
 ## Building a portable executable
 
 Requires the optional `build` dependencies:

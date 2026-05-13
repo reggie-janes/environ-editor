@@ -94,7 +94,7 @@ class TestWriteAsRoot:
             _write_as_root(dest, "new\n")
         assert dest.read_text() == "new\n"
 
-    def test_unelevated_invokes_helper(self, tmp_path):
+    def test_unelevated_linux_uses_pkexec_with_sh(self, tmp_path):
         dest = tmp_path / "envedit.sh"
         with patch("envedit.core.platform_unix.is_elevated", return_value=False), \
              patch("envedit.core.platform_unix.sys.platform", "linux"), \
@@ -104,7 +104,54 @@ class TestWriteAsRoot:
         run.assert_called_once()
         argv = run.call_args.args[0]
         assert argv[0] == "pkexec"
-        assert "install" in argv
+        assert argv[1] == "sh"
+        assert argv[2] == "-c"
+
+    def test_unelevated_falls_back_to_sudo(self, tmp_path):
+        dest = tmp_path / "envedit.sh"
+        with patch("envedit.core.platform_unix.is_elevated", return_value=False), \
+             patch("envedit.core.platform_unix.sys.platform", "linux"), \
+             patch("shutil.which", return_value=None), \
+             patch("envedit.core.platform_unix.subprocess.run") as run:
+            _write_as_root(dest, "payload\n")
+        assert run.call_args.args[0][0] == "sudo"
+
+    def test_unelevated_embeds_content_as_base64(self, tmp_path):
+        # Regression test for the temp-file TOCTOU (issue 006). The content
+        # must be embedded in the shell command itself — base64 inside argv —
+        # not passed through a user-writable file path that the elevated
+        # tool then reads.
+        import base64
+        dest = tmp_path / "envedit.sh"
+        content = 'export FOO="hello\nworld"\n'
+        with patch("envedit.core.platform_unix.is_elevated", return_value=False), \
+             patch("envedit.core.platform_unix.sys.platform", "linux"), \
+             patch("shutil.which", return_value="/usr/bin/pkexec"), \
+             patch("envedit.core.platform_unix.subprocess.run") as run:
+            _write_as_root(dest, content)
+        shell_cmd = run.call_args.args[0][3]  # pkexec sh -c <THIS>
+        expected_b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        assert expected_b64 in shell_cmd
+        # Plaintext content must not appear — it is supposed to live only
+        # inside the base64 blob.
+        assert content not in shell_cmd
+        # No envedit-prefixed mktemp/NamedTemporaryFile path should be
+        # referenced as the source (that was the old TOCTOU pattern).
+        assert "envedit-" not in shell_cmd
+        # subprocess.run must not be called with `input=` (would imply
+        # piping content; the fix uses base64-in-argv instead).
+        assert run.call_args.kwargs.get("input") is None
+
+    def test_unelevated_macos_uses_osascript(self, tmp_path):
+        dest = tmp_path / "envedit.sh"
+        with patch("envedit.core.platform_unix.is_elevated", return_value=False), \
+             patch("envedit.core.platform_unix.sys.platform", "darwin"), \
+             patch("envedit.core.platform_unix.subprocess.run") as run:
+            _write_as_root(dest, "payload\n")
+        argv = run.call_args.args[0]
+        assert argv[0] == "osascript"
+        assert argv[1] == "-e"
+        assert "administrator privileges" in argv[2]
 
 
 # ---------------------------------------------------------------------------

@@ -190,7 +190,7 @@ def _ensure_sourced_in_profile() -> None:
 
 
 def _write_as_root(path: Path, content: str) -> None:
-    import tempfile, shutil
+    import base64, shutil
 
     if is_elevated():
         # Already root — write directly. Skipping pkexec/sudo/osascript also
@@ -202,25 +202,37 @@ def _write_as_root(path: Path, content: str) -> None:
         os.replace(tmp, path)
         return
 
-    with tempfile.NamedTemporaryFile("w", suffix=".tmp", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-    try:
-        if sys.platform == "darwin":
-            # pkexec doesn't exist on macOS; sudo without a controlling terminal
-            # fails in a GUI app. osascript with "administrator privileges"
-            # shows the native macOS password sheet.
-            shell_cmd = shlex.join(["install", "-m", "644", tmp_path, str(path)])
-            script = (
-                f"do shell script {json.dumps(shell_cmd)} "
-                f"with administrator privileges"
-            )
-            subprocess.run(["osascript", "-e", script], check=True)
-        else:
-            tool = "pkexec" if shutil.which("pkexec") else "sudo"
-            subprocess.run(
-                [tool, "install", "-m", "644", tmp_path, str(path)],
-                check=True,
-            )
-    finally:
-        os.unlink(tmp_path)
+    # Embed the content as base64 inside the shell command rather than
+    # writing it to a user-owned temp file first. A user-writable
+    # intermediate is a TOCTOU vector: between our write and the elevated
+    # tool's read, a same-uid hostile process could rewrite the file (or
+    # symlink-swap it to /etc/shadow — GNU `install` follows symlinks on
+    # its source). With the content baked into the shell-command string,
+    # there is no intermediate to race; the elevated shell creates the
+    # `.new` file inside the destination directory (root-owned), where a
+    # non-root attacker cannot interpose.
+    b64 = base64.b64encode(content.encode("utf-8")).decode("ascii")
+    dest = shlex.quote(str(path))
+    dest_new = shlex.quote(str(path) + ".new")
+    dest_dir = shlex.quote(str(path.parent))
+    shell_cmd = (
+        f"set -e; "
+        f"umask 022; "
+        f"mkdir -p {dest_dir}; "
+        f"printf %s {shlex.quote(b64)} | base64 -d > {dest_new}; "
+        f"chmod 644 {dest_new}; "
+        f"mv {dest_new} {dest}"
+    )
+
+    if sys.platform == "darwin":
+        # pkexec doesn't exist on macOS; sudo without a controlling terminal
+        # fails in a GUI app. osascript with "administrator privileges"
+        # shows the native macOS password sheet.
+        script = (
+            f"do shell script {json.dumps(shell_cmd)} "
+            f"with administrator privileges"
+        )
+        subprocess.run(["osascript", "-e", script], check=True)
+    else:
+        tool = "pkexec" if shutil.which("pkexec") else "sudo"
+        subprocess.run([tool, "sh", "-c", shell_cmd], check=True)

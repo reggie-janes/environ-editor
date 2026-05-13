@@ -1,5 +1,5 @@
+import base64
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -18,26 +18,21 @@ def _apply_system_payload(payload: dict) -> int:
 
 
 def _maybe_run_elevated_apply() -> bool:
-    """If invoked with --apply-system-file <path>, perform the apply and exit.
+    """If invoked with --apply-system-base64 <b64>, decode the payload,
+    apply it, and exit. Used by the Windows elevation flow — the parent
+    process embeds the JSON payload in argv rather than handing the
+    elevated child a path to a user-writable temp file (TOCTOU vector).
 
-    Returns True if the flag was handled (caller should exit), False otherwise.
+    Returns True if the flag was handled (caller should exit), False
+    otherwise.
     """
-    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-system-file":
-        payload_path = sys.argv[2]
+    if len(sys.argv) >= 3 and sys.argv[1] == "--apply-system-base64":
         try:
-            with open(payload_path, "r", encoding="utf-8") as f:
-                payload = json.load(f)
+            payload_bytes = base64.b64decode(sys.argv[2], validate=True)
+            payload = json.loads(payload_bytes.decode("utf-8"))
         except Exception as exc:
-            print(f"envedit: failed to read payload: {exc}", file=sys.stderr)
-            try:
-                os.unlink(payload_path)
-            except OSError:
-                pass
+            print(f"envedit: failed to decode payload: {exc}", file=sys.stderr)
             sys.exit(1)
-        try:
-            os.unlink(payload_path)
-        except OSError:
-            pass
         sys.exit(_apply_system_payload(payload))
     return False
 

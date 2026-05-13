@@ -64,52 +64,22 @@ class TestIsElevatedViaWrapper:
 
 
 class TestRequestElevationAndApply:
-    def test_linux_uses_pkexec_when_available(self):
-        mock_run = MagicMock(return_value=MagicMock(returncode=0))
-        with patch.object(sys, "platform", "linux"), \
-             patch("shutil.which", return_value="/usr/bin/pkexec"), \
-             patch("subprocess.run", mock_run) as mock_run:
-            result = request_elevation_and_apply({"system_vars": {"FOO": "bar"}})
-        assert result is True
-        cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "pkexec"
+    def test_raises_on_linux(self):
+        with patch.object(sys, "platform", "linux"):
+            with pytest.raises(NotImplementedError):
+                request_elevation_and_apply({"system_vars": {"FOO": "bar"}})
 
-    def test_linux_falls_back_to_sudo_when_no_pkexec(self):
-        mock_run = MagicMock(return_value=MagicMock(returncode=0))
-        with patch.object(sys, "platform", "linux"), \
-             patch("shutil.which", return_value=None), \
-             patch("subprocess.run", mock_run):
-            result = request_elevation_and_apply({"system_vars": {"FOO": "bar"}})
-        assert result is True
-        cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "sudo"
+    def test_raises_on_macos(self):
+        with patch.object(sys, "platform", "darwin"):
+            with pytest.raises(NotImplementedError):
+                request_elevation_and_apply({"system_vars": {"FOO": "bar"}})
 
-    def test_linux_returns_false_on_cancelled(self):
-        import subprocess
-        with patch.object(sys, "platform", "linux"), \
-             patch("shutil.which", return_value="/usr/bin/pkexec"), \
-             patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "pkexec")):
-            result = request_elevation_and_apply({"system_vars": {}})
-        assert result is False
-
-    def test_passes_json_payload_via_temp_file(self, tmp_path):
-        import json
-        captured_cmd = []
-        def fake_run(cmd, **kwargs):
-            captured_cmd.extend(cmd)
-            return MagicMock(returncode=0)
-
-        with patch.object(sys, "platform", "linux"), \
-             patch("shutil.which", return_value="/usr/bin/pkexec"), \
-             patch("subprocess.run", side_effect=fake_run):
-            request_elevation_and_apply({"system_vars": {"KEY": "val"}})
-
-        # The CLI should pass a path argument after --apply-system-file
-        assert "--apply-system-file" in captured_cmd
-        path_arg = captured_cmd[captured_cmd.index("--apply-system-file") + 1]
-        # File still exists at this point (the elevated child is responsible
-        # for unlinking it; the fake never ran the child).
-        with open(path_arg) as f:
-            payload = json.load(f)
-        assert payload["system_vars"]["KEY"] == "val"
-        os.unlink(path_arg)
+    def test_rejects_oversized_payload(self):
+        # Reject payloads that would risk truncation at Windows' 32767-char
+        # CreateProcess command-line limit. Constructing a value whose JSON
+        # representation base64s to > 30000 chars verifies the guard fires
+        # before any ShellExecuteEx call.
+        huge_value = "A" * 25000
+        with patch.object(sys, "platform", "win32"):
+            with pytest.raises(ValueError, match="too large"):
+                request_elevation_and_apply({"system_vars": {"BIG": huge_value}})
