@@ -3,8 +3,9 @@ import json
 import sys
 from pathlib import Path
 
-ASSETS  = Path(__file__).parent / "assets"
-QML_DIR = Path(__file__).parent / "envedit" / "qml"
+_ROOT   = Path(__file__).parent
+ASSETS  = _ROOT / "assets"
+QML_DIR = (_ROOT / "qml") if (_ROOT / "qml" / "main.qml").exists() else (_ROOT / "envedit" / "qml")
 
 
 def _apply_system_payload(payload: dict) -> int:

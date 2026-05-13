@@ -6,6 +6,6 @@ python -m nuitka \
   --plugin-enable=pyside6 \
   --linux-icon=assets/environ-editor.ico \
   --include-data-dir=assets=assets \
-  --include-data-dir=envedit/qml=envedit/qml \
+  --include-data-dir=envedit/qml=qml \
   --output-filename=EnvEdit \
   main.py

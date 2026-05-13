@@ -5,6 +5,6 @@ python -m nuitka \
   --macos-create-app-bundle \
   --plugin-enable=pyside6 \
   --include-data-dir=assets=assets \
-  --include-data-dir=envedit/qml=envedit/qml \
+  --include-data-dir=envedit/qml=qml \
   --output-filename=EnvEdit \
   main.py
