@@ -1,5 +1,6 @@
 @echo off
 python -m nuitka ^
+  --assume-yes-for-downloads ^
   --standalone ^
   --onefile ^
   --plugin-enable=pyside6 ^

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 python -m nuitka \
+  --assume-yes-for-downloads \
   --standalone \
   --macos-create-app-bundle \
   --plugin-enable=pyside6 \
