@@ -33,7 +33,7 @@ Dialog {
 
         Button {
             text: "📁  Browse…"
-            Material.foreground: Theme.accent
+            flat: true
             onClicked: folderDialog.open()
         }
 
