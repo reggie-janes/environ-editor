@@ -8,8 +8,13 @@ __pycache__/
 dist/
 build/*.dist/
 build/*.build/
+# Nuitka writes these to CWD (repo root) when build scripts are run.
+/main.dist/
+/main.build/
+/main.onefile-build/
 /EnvEdit
 /EnvEdit.exe
+/EnvEdit.app/
 # core.ignorecase=true would otherwise swallow the envedit/ package
 !/envedit/
 

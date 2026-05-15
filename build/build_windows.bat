@@ -1,14 +1,8 @@
 @echo off
-REM --onefile is intentionally still off so the next CI run prints a fresh
-REM diagnostic and we can see what these exclusions actually saved. Restore
-REM --onefile and re-enable artifact upload once size looks healthy.
-REM
-REM --nofollow-import-to has no effect on what the PySide6 plugin physically
-REM copies, so it's gone. We exclude DLLs by filename/path pattern instead.
-REM Patterns are matched against the relative path inside the bundle.
 python -m nuitka ^
   --assume-yes-for-downloads ^
   --standalone ^
+  --onefile ^
   --plugin-enable=pyside6 ^
   --include-qt-plugins=qml ^
   --include-windows-runtime-dlls=no ^

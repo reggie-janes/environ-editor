@@ -61,39 +61,9 @@ jobs:
         shell: cmd
         run: uv run ${{ matrix.script }}
 
-      - name: Inspect bundle contents (Windows diagnostic)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "=== Total size of main.dist ==="
-          $total = (Get-ChildItem -Recurse main.dist | Measure-Object -Property Length -Sum).Sum
-          "{0:N2} MB" -f ($total / 1MB)
-
-          Write-Host "`n=== Top 50 largest files ==="
-          Get-ChildItem -Recurse main.dist -File |
-            Sort-Object Length -Descending |
-            Select-Object -First 50 |
-            Format-Table -AutoSize @{n='MB';e={[math]::Round($_.Length/1MB,2)}}, FullName
-
-          Write-Host "`n=== Size per top-level directory ==="
-          Get-ChildItem main.dist -Directory | ForEach-Object {
-            $size = (Get-ChildItem -Recurse $_.FullName -File | Measure-Object -Property Length -Sum).Sum
-            [PSCustomObject]@{ MB = [math]::Round($size/1MB,2); Path = $_.Name }
-          } | Sort-Object MB -Descending | Format-Table -AutoSize
-
-          Write-Host "`n=== Size of PySide6 subdirs (if present) ==="
-          $pyside = Get-ChildItem -Recurse main.dist -Directory -Filter PySide6 | Select-Object -First 1
-          if ($pyside) {
-            Get-ChildItem $pyside.FullName -Directory | ForEach-Object {
-              $size = (Get-ChildItem -Recurse $_.FullName -File | Measure-Object -Property Length -Sum).Sum
-              [PSCustomObject]@{ MB = [math]::Round($size/1MB,2); Path = $_.Name }
-            } | Sort-Object MB -Descending | Format-Table -AutoSize
-          }
-
-      # Upload disabled this iteration — we just need the diagnostic above.
-      # - name: Upload artifact
-      #   uses: actions/upload-artifact@v7
-      #   with:
-      #     name: ${{ matrix.artifact_name }}
-      #     path: ${{ matrix.artifact_path }}
-      #     if-no-files-found: error
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
