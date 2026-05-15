@@ -4,7 +4,7 @@ import os
 import platform
 import sys
 
-from PySide6.QtCore import QObject, QSettings, Property, Signal, Slot
+from PySide6.QtCore import QObject, QSettings, Property, QUrl, Signal, Slot
 
 from envedit.core.env_backend import EnvBackend, get_backend
 from envedit.core.privilege import is_elevated, is_elevated_via_wrapper
@@ -180,6 +180,10 @@ class AppController(QObject):
     @Slot(str, result=str)
     def expandValue(self, value: str) -> str:
         return self._backend.expand_value(value)
+
+    @Slot(QUrl, result=str)
+    def urlToLocalFile(self, url: QUrl) -> str:
+        return url.toLocalFile()
 
     @Slot(str)
     def openFolder(self, path: str) -> None:

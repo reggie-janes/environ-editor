@@ -24,7 +24,7 @@ Dialog {
 
     Platform.FolderDialog {
         id: folderDialog
-        onAccepted: pathField.text = Qt.urlToLocalFile(folderDialog.folder)
+        onAccepted: pathField.text = appController.urlToLocalFile(folderDialog.folder)
     }
 
     ColumnLayout {
@@ -32,8 +32,8 @@ Dialog {
         spacing: 16
 
         Button {
-            text: "Browse…"
-            flat: true
+            text: "📁  Browse…"
+            Material.foreground: Theme.accent
             onClicked: folderDialog.open()
         }
 
