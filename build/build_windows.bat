@@ -1,13 +1,49 @@
 @echo off
-REM --onefile temporarily removed so we can inspect main.dist/ contents
-REM in CI to find what's bloating the bundle. Restore once we know.
+REM --onefile is intentionally still off so the next CI run prints a fresh
+REM diagnostic and we can see what these exclusions actually saved. Restore
+REM --onefile and re-enable artifact upload once size looks healthy.
+REM
+REM --nofollow-import-to has no effect on what the PySide6 plugin physically
+REM copies, so it's gone. We exclude DLLs by filename/path pattern instead.
+REM Patterns are matched against the relative path inside the bundle.
 python -m nuitka ^
   --assume-yes-for-downloads ^
   --standalone ^
   --plugin-enable=pyside6 ^
   --include-qt-plugins=qml ^
   --include-windows-runtime-dlls=no ^
-  --nofollow-import-to=PySide6.QtWebEngineCore,PySide6.QtWebEngineWidgets,PySide6.QtWebEngineQuick,PySide6.QtWebChannel,PySide6.QtWebSockets,PySide6.QtWebView,PySide6.Qt3DCore,PySide6.Qt3DRender,PySide6.Qt3DInput,PySide6.Qt3DAnimation,PySide6.Qt3DExtras,PySide6.Qt3DLogic,PySide6.QtCharts,PySide6.QtDataVisualization,PySide6.QtMultimedia,PySide6.QtMultimediaWidgets,PySide6.QtSpatialAudio,PySide6.QtPdf,PySide6.QtPdfWidgets,PySide6.QtBluetooth,PySide6.QtNfc,PySide6.QtPositioning,PySide6.QtLocation,PySide6.QtSensors,PySide6.QtSerialBus,PySide6.QtSerialPort,PySide6.QtTextToSpeech,PySide6.QtVirtualKeyboard,PySide6.QtRemoteObjects,PySide6.QtScxml,PySide6.QtStateMachine,PySide6.QtSql,PySide6.QtTest,PySide6.QtHelp,PySide6.QtDesigner,PySide6.QtUiTools ^
+  --noinclude-qt-translations ^
+  --noinclude-dlls=*Qt6WebEngine* ^
+  --noinclude-dlls=*Qt6Pdf* ^
+  --noinclude-dlls=*Qt6Charts* ^
+  --noinclude-dlls=*Qt6Location* ^
+  --noinclude-dlls=*Qt6Multimedia* ^
+  --noinclude-dlls=*Qt6SpatialAudio* ^
+  --noinclude-dlls=*Qt6DataVisualization* ^
+  --noinclude-dlls=*Qt6Graphs* ^
+  --noinclude-dlls=*Qt6RemoteObjects* ^
+  --noinclude-dlls=*Qt6Quick3D* ^
+  --noinclude-dlls=*Qt63D* ^
+  --noinclude-dlls=*Qt6Bluetooth* ^
+  --noinclude-dlls=*Qt6Nfc* ^
+  --noinclude-dlls=*Qt6Positioning* ^
+  --noinclude-dlls=*Qt6Sensors* ^
+  --noinclude-dlls=*Qt6SerialBus* ^
+  --noinclude-dlls=*Qt6SerialPort* ^
+  --noinclude-dlls=*Qt6TextToSpeech* ^
+  --noinclude-dlls=*Qt6Scxml* ^
+  --noinclude-dlls=*Qt6StateMachine* ^
+  --noinclude-dlls=*Qt6Sql* ^
+  --noinclude-dlls=*Qt6Test* ^
+  --noinclude-dlls=*Qt6Help* ^
+  --noinclude-dlls=*Qt6Designer* ^
+  --noinclude-dlls=*Qt6QuickControls2Imagine* ^
+  --noinclude-dlls=*Qt6QuickControls2Fusion* ^
+  --noinclude-dlls=*Qt6QuickControls2Universal* ^
+  --noinclude-dlls=*FluentWinUI3* ^
+  --noinclude-dlls=*VirtualKeyboard* ^
+  --noinclude-dlls=*Qt5Compat* ^
+  --noinclude-dlls=*NativeStyle* ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
   --include-data-dir=assets=assets ^
