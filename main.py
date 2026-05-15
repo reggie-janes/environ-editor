@@ -1,7 +1,13 @@
 import base64
 import json
+import os
 import sys
 from pathlib import Path
+
+# Silence "qt.qpa.mime: Retrying to obtain clipboard" — fires whenever another
+# app writes to the clipboard while we hold a TextInput listener. Harmless,
+# unavoidable from app code. Must be set before any Qt import.
+os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.mime.warning=false")
 
 _ROOT   = Path(__file__).parent
 ASSETS  = _ROOT / "assets"
