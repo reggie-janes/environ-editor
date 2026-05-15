@@ -1,8 +1,9 @@
 @echo off
+REM --onefile temporarily removed so we can inspect main.dist/ contents
+REM in CI to find what's bloating the bundle. Restore once we know.
 python -m nuitka ^
   --assume-yes-for-downloads ^
   --standalone ^
-  --onefile ^
   --plugin-enable=pyside6 ^
   --include-qt-plugins=qml ^
   --include-windows-runtime-dlls=no ^
