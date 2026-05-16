@@ -38,6 +38,7 @@ python -m nuitka ^
   --noinclude-dlls=*VirtualKeyboard* ^
   --noinclude-dlls=*Qt5Compat* ^
   --noinclude-dlls=*NativeStyle* ^
+  --noinclude-dlls=opengl32sw.dll ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
   --include-data-dir=assets=assets ^
