@@ -13,12 +13,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Temporarily Windows-only while we iterate on PySide6 module
-          # exclusions to shrink the bundle. Re-enable before tagging.
-          # - os: ubuntu-latest
-          #   script: build/build_linux.sh
-          #   artifact_path: EnvEdit
-          #   artifact_name: EnvEdit-linux
+          - os: ubuntu-latest
+            script: build/build_linux.sh
+            artifact_path: EnvEdit
+            artifact_name: EnvEdit-linux
           - os: windows-latest
             script: build/build_windows.bat
             artifact_path: EnvEdit.exe
