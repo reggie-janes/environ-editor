@@ -15,6 +15,7 @@ QtObject {
     readonly property color accent:        isDark ? "#7aa2f7" : "#3d59a1"
     readonly property color colorPositive: isDark ? "#e0c067" : "#8f6c00"
     readonly property color colorNegative: isDark ? "#f7768e" : "#c0384a"
+    readonly property color colorNegativeText: "#ffffff"
 
     // Special
     readonly property color transparent: "transparent"
