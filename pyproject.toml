@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 build = [
-    "nuitka>=2.4",
+    "nuitka[onefile]>=2.4",
     "ordered-set",
 ]
 test = [
