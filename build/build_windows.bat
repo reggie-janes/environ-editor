@@ -39,6 +39,9 @@ python -m nuitka ^
   --noinclude-dlls=*Qt5Compat* ^
   --noinclude-dlls=*NativeStyle* ^
   --noinclude-dlls=opengl32sw.dll ^
+  --noinclude-dlls=libcrypto-*.dll ^
+  --noinclude-dlls=libssl-*.dll ^
+  --noinclude-qt-plugins=tls ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
   --include-data-dir=assets=assets ^
