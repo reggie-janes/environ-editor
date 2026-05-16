@@ -81,7 +81,6 @@ def main() -> None:
 def _load_fonts(app) -> None:
     from PySide6.QtGui import QFontDatabase, QFont
     for name in ("Roboto-VariableFont_wdth,wght.ttf",
-                 "Roboto-Italic-VariableFont_wdth,wght.ttf",
                  "RobotoMono-VariableFont_wght.ttf"):
         path = ASSETS / name
         if path.exists():
