@@ -8,6 +8,23 @@ from PySide6.QtCore import (
 )
 
 
+def _path_rejection_reason(path: str) -> str | None:
+    """Return a human-readable rejection reason, or None if the path is OK
+    to add. Rejects empty input, os.pathsep-bearing input (would fan out
+    into multiple entries after the round-trip), and newline/NUL (would
+    corrupt the shell file or registry value)."""
+    if not path.strip():
+        return "Path cannot be empty."
+    if os.pathsep in path:
+        sep_name = "':'" if os.pathsep == ":" else "';'"
+        return (
+            f"Path entries cannot contain {sep_name}. Add one entry per row."
+        )
+    if "\n" in path or "\r" in path or "\x00" in path:
+        return "Path entries cannot contain newline or null characters."
+    return None
+
+
 def _status(path: str) -> str:
     if os.path.islink(path):
         # os.path.isdir follows symlinks; broken links return False here.
@@ -27,6 +44,7 @@ class PathModel(QAbstractListModel):
 
     pendingCountChanged = Signal()
     filterChanged = Signal()
+    errorOccurred = Signal(str)
 
     def __init__(self, expand_fn=None, parent=None):
         super().__init__(parent)
@@ -97,6 +115,10 @@ class PathModel(QAbstractListModel):
     def addEntry(self, path: str) -> None:
         path = path.strip()
         if not path:
+            return
+        reason = _path_rejection_reason(path)
+        if reason is not None:
+            self.errorOccurred.emit(reason)
             return
         self._entries.append({"path": path, "original": None, "is_new": True, "is_deleted": False})
         self._mark_dirty()
