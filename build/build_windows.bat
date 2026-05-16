@@ -3,6 +3,10 @@ python -m nuitka ^
   --assume-yes-for-downloads ^
   --standalone ^
   --onefile ^
+  --lto=yes ^
+  --python-flag=no_site ^
+  --python-flag=no_asserts ^
+  --python-flag=no_docstrings ^
   --plugin-enable=pyside6 ^
   --include-qt-plugins=qml ^
   --include-windows-runtime-dlls=no ^
