@@ -36,7 +36,7 @@ class WindowsBackend(EnvBackend):
     def apply_user_vars(self, changes: dict[str, str | None]) -> None:
         import winreg
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _HKCU_ENV, 0,
-                            winreg.KEY_SET_VALUE) as key:
+                            winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
             for name, val in changes.items():
                 if val is None:
                     try:
@@ -44,7 +44,8 @@ class WindowsBackend(EnvBackend):
                     except FileNotFoundError:
                         pass
                 else:
-                    winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, val)
+                    winreg.SetValueEx(key, name, 0,
+                                      self._reg_type_for(key, name, val), val)
         self._broadcast_change()
 
     def apply_system_vars(self, changes: dict[str, str | None], on_complete=None) -> bool:
@@ -55,7 +56,7 @@ class WindowsBackend(EnvBackend):
             return False  # elevated child was launched but hasn't written yet
         import winreg
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _HKLM_ENV, 0,
-                            winreg.KEY_SET_VALUE) as key:
+                            winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
             for name, val in changes.items():
                 if val is None:
                     try:
@@ -63,9 +64,36 @@ class WindowsBackend(EnvBackend):
                     except FileNotFoundError:
                         pass
                 else:
-                    winreg.SetValueEx(key, name, 0, winreg.REG_EXPAND_SZ, val)
+                    winreg.SetValueEx(key, name, 0,
+                                      self._reg_type_for(key, name, val), val)
         self._broadcast_change()
         return True
+
+    @staticmethod
+    def _reg_type_for(key, name: str, value: str) -> int:
+        """Preserve the existing key's type when overwriting; for new keys,
+        pick REG_EXPAND_SZ only when the value actually contains a `%VAR%`
+        reference. The previous behaviour of always picking REG_EXPAND_SZ
+        silently upgraded REG_SZ values written by other tools and turned
+        literal `%` characters in user-typed values into surprise expansions.
+        """
+        import winreg
+        try:
+            _, kind = winreg.QueryValueEx(key, name)
+            if kind in (winreg.REG_SZ, winreg.REG_EXPAND_SZ):
+                return int(kind)
+        except FileNotFoundError:
+            pass
+        # New value: heuristic — expand-on-read only when there is at least
+        # one `%...%` pair. Values containing isolated `%` (e.g. "100%") get
+        # REG_SZ so they round-trip literally.
+        if "%" in value and value.count("%") >= 2:
+            # Cheap regex-free check: a likely %VAR% somewhere.
+            first = value.find("%")
+            second = value.find("%", first + 1)
+            if second > first + 1:
+                return winreg.REG_EXPAND_SZ
+        return winreg.REG_SZ
 
     def apply_user_path(self, entries: list[str]) -> None:
         self.apply_user_vars({"PATH": os.pathsep.join(entries)})

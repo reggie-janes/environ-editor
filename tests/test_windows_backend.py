@@ -24,11 +24,16 @@ def fake_winreg(monkeypatch):
     fake.HKEY_CURRENT_USER = 1
     fake.HKEY_LOCAL_MACHINE = 2
     fake.KEY_SET_VALUE = 0x0002
+    fake.KEY_READ = 0x20019
+    fake.REG_SZ = 1
     fake.REG_EXPAND_SZ = 2
     fake.OpenKey = MagicMock()
     fake.SetValueEx = MagicMock()
     fake.DeleteValue = MagicMock()
     fake.EnumValue = MagicMock(side_effect=OSError)
+    # _reg_type_for() queries existing value type with QueryValueEx. Default
+    # to "not found" so new writes go through the heuristic branch.
+    fake.QueryValueEx = MagicMock(side_effect=FileNotFoundError)
     monkeypatch.setitem(sys.modules, "winreg", fake)
     return fake
 
@@ -58,8 +63,9 @@ class TestIget:
 # ---------------------------------------------------------------------------
 
 class TestApplyUserVars:
-    def test_set_calls_SetValueEx_with_REG_EXPAND_SZ(self, fake_winreg):
-        # Patch _broadcast_change because it pulls in ctypes.windll.
+    def test_set_calls_SetValueEx_with_REG_SZ_for_literal_value(self, fake_winreg):
+        # Issue 016: values that don't reference %VAR% should be written as
+        # REG_SZ so a literal `%` in the value isn't silently expanded.
         with patch(
             "envedit.core.platform_windows.WindowsBackend._broadcast_change"
         ):
@@ -70,8 +76,35 @@ class TestApplyUserVars:
         args = fake_winreg.SetValueEx.call_args[0]
         # signature: SetValueEx(key, name, reserved, type, data)
         assert args[1] == "FOO"
-        assert args[3] == fake_winreg.REG_EXPAND_SZ
+        assert args[3] == fake_winreg.REG_SZ
         assert args[4] == "bar"
+
+    def test_set_calls_SetValueEx_with_REG_EXPAND_SZ_when_value_has_var(self, fake_winreg):
+        # Values containing a `%...%` pair get REG_EXPAND_SZ so the OS
+        # expands them on read — that's the right type for PATH-like values.
+        with patch(
+            "envedit.core.platform_windows.WindowsBackend._broadcast_change"
+        ):
+            from envedit.core.platform_windows import WindowsBackend
+            WindowsBackend().apply_user_vars({"FOO": "%SystemRoot%\\bin"})
+
+        args = fake_winreg.SetValueEx.call_args[0]
+        assert args[3] == fake_winreg.REG_EXPAND_SZ
+
+    def test_set_preserves_existing_type(self, fake_winreg):
+        # An existing REG_EXPAND_SZ key keeps that type even if the new
+        # literal value lacks `%...%`. Round-trip fidelity matters here —
+        # downgrading to REG_SZ would silently change semantics for any
+        # other reader of that key.
+        fake_winreg.QueryValueEx = MagicMock(return_value=("old", fake_winreg.REG_EXPAND_SZ))
+        with patch(
+            "envedit.core.platform_windows.WindowsBackend._broadcast_change"
+        ):
+            from envedit.core.platform_windows import WindowsBackend
+            WindowsBackend().apply_user_vars({"FOO": "literal"})
+
+        args = fake_winreg.SetValueEx.call_args[0]
+        assert args[3] == fake_winreg.REG_EXPAND_SZ
 
     def test_none_value_calls_DeleteValue(self, fake_winreg):
         with patch(
