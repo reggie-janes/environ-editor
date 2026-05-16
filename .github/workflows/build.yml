@@ -21,10 +21,10 @@ jobs:
             script: build/build_windows.bat
             artifact_path: EnvEdit.exe
             artifact_name: EnvEdit-windows
-          # - os: macos-latest
-          #   script: build/build_macos.sh
-          #   artifact_path: EnvEdit.app
-          #   artifact_name: EnvEdit-macos
+          - os: macos-latest
+            script: build/build_macos.sh
+            artifact_path: EnvEdit.app
+            artifact_name: EnvEdit-macos
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

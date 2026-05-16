@@ -4,8 +4,73 @@ python -m nuitka \
   --assume-yes-for-downloads \
   --standalone \
   --macos-create-app-bundle \
+  --lto=yes \
+  --python-flag=no_site \
+  --python-flag=no_asserts \
+  --python-flag=no_docstrings \
   --plugin-enable=pyside6 \
   --include-qt-plugins=qml \
+  --noinclude-qt-translations \
+  --noinclude-dlls=*Qt6WebEngine* \
+  --noinclude-dlls=*Qt6Pdf* \
+  --noinclude-dlls=*Qt6Charts* \
+  --noinclude-dlls=*Qt6Location* \
+  --noinclude-dlls=*Qt6Multimedia* \
+  --noinclude-dlls=*Qt6SpatialAudio* \
+  --noinclude-dlls=*Qt6DataVisualization* \
+  --noinclude-dlls=*Qt6Graphs* \
+  --noinclude-dlls=*Qt6RemoteObjects* \
+  --noinclude-dlls=*Qt6Quick3D* \
+  --noinclude-dlls=*Qt63D* \
+  --noinclude-dlls=*Qt6Bluetooth* \
+  --noinclude-dlls=*Qt6Nfc* \
+  --noinclude-dlls=*Qt6Positioning* \
+  --noinclude-dlls=*Qt6Sensors* \
+  --noinclude-dlls=*Qt6SerialBus* \
+  --noinclude-dlls=*Qt6SerialPort* \
+  --noinclude-dlls=*Qt6TextToSpeech* \
+  --noinclude-dlls=*Qt6Scxml* \
+  --noinclude-dlls=*Qt6StateMachine* \
+  --noinclude-dlls=*Qt6Sql* \
+  --noinclude-dlls=*Qt6Test* \
+  --noinclude-dlls=*Qt6Help* \
+  --noinclude-dlls=*Qt6Designer* \
+  --noinclude-dlls=*Qt6QuickControls2Imagine* \
+  --noinclude-dlls=*Qt6QuickControls2Fusion* \
+  --noinclude-dlls=*Qt6QuickControls2Universal* \
+  --noinclude-dlls=*FluentWinUI3* \
+  --noinclude-dlls=*VirtualKeyboard* \
+  --noinclude-dlls=*Qt5Compat* \
+  --noinclude-dlls=*NativeStyle* \
+  --noinclude-dlls=*quick3d*plugin* \
+  --noinclude-dlls=declarative_*plugin* \
+  --noinclude-dlls=qtchartsqml*plugin* \
+  --noinclude-dlls=datavisualization*plugin* \
+  --noinclude-dlls=graphsplugin* \
+  --noinclude-dlls=quickmultimedia*plugin* \
+  --noinclude-dlls=positioningquick*plugin* \
+  --noinclude-dlls=sensorsquick*plugin* \
+  --noinclude-dlls=quicktestplugin* \
+  --noinclude-dlls=texttospeechqml*plugin* \
+  --noinclude-dlls=webchannelquick*plugin* \
+  --noinclude-dlls=*webengine*plugin* \
+  --noinclude-dlls=qmlwebsockets*plugin* \
+  --noinclude-dlls=qtwebviewquick*plugin* \
+  --noinclude-dlls=qtqmlstatemachineplugin* \
+  --noinclude-dlls=qmlxmllistmodelplugin* \
+  --noinclude-dlls=qtquickcontrols2fusionstyleplugin* \
+  --noinclude-dlls=qtquickcontrols2imaginestyleplugin* \
+  --noinclude-dlls=qtquickcontrols2universalstyleplugin* \
+  --noinclude-qt-plugins=tls \
+  --noinclude-qt-plugins=styles \
+  --noinclude-dlls=*qgif* \
+  --noinclude-dlls=*qicns* \
+  --noinclude-dlls=*qjpeg* \
+  --noinclude-dlls=*qpdf* \
+  --noinclude-dlls=*qtga* \
+  --noinclude-dlls=*qtiff* \
+  --noinclude-dlls=*qwbmp* \
+  --noinclude-dlls=*qwebp* \
   --include-data-dir=assets=assets \
   --include-data-dir=envedit/qml=qml \
   --output-filename=EnvEdit \
