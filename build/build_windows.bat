@@ -57,6 +57,11 @@ python -m nuitka ^
   --noinclude-dlls=qtwebviewquick*plugin* ^
   --noinclude-dlls=qtqmlstatemachineplugin* ^
   --noinclude-dlls=qmlxmllistmodelplugin* ^
+  --noinclude-dlls=qtquickcontrols2fusionstyleplugin* ^
+  --noinclude-dlls=qtquickcontrols2imaginestyleplugin* ^
+  --noinclude-dlls=qtquickcontrols2universalstyleplugin* ^
+  --noinclude-dlls=qtquickcontrols2windowsstyleplugin* ^
+  --noinclude-dlls=qtquickcontrols2windowsstyleimplplugin* ^
   --noinclude-qt-plugins=tls ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
