@@ -35,8 +35,6 @@ python -m nuitka ^
   --noinclude-dlls=*Qt6Test* ^
   --noinclude-dlls=*Qt6Help* ^
   --noinclude-dlls=*Qt6Designer* ^
-  --noinclude-dlls=*Qt6OpenGL* ^
-  --noinclude-dlls=QtOpenGL.pyd ^
   --noinclude-dlls=*Qt6QuickControls2Imagine* ^
   --noinclude-dlls=*Qt6QuickControls2Fusion* ^
   --noinclude-dlls=*Qt6QuickControls2Universal* ^
