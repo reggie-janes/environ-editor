@@ -28,11 +28,13 @@ class TestWriteEnvSh:
         assert dest.exists()
 
     def test_exports_all_vars(self, tmp_path):
+        # Issue 002: values are single-quoted so `$`, backticks, and `$(...)`
+        # round-trip literally.
         dest = tmp_path / "env.sh"
         _write_env_sh(dest, {"FOO": "bar", "BAZ": "qux"})
         content = dest.read_text()
-        assert 'export FOO="bar"' in content
-        assert 'export BAZ="qux"' in content
+        assert "export FOO='bar'" in content
+        assert "export BAZ='qux'" in content
 
     def test_sorts_vars_alphabetically(self, tmp_path):
         dest = tmp_path / "env.sh"
@@ -40,17 +42,36 @@ class TestWriteEnvSh:
         content = dest.read_text()
         assert content.index("AAA") < content.index("ZZZ")
 
-    def test_escapes_double_quotes_in_value(self, tmp_path):
+    def test_double_quotes_in_value_are_literal(self, tmp_path):
+        # Single-quoted POSIX strings have no escape processing, so " is
+        # emitted verbatim with no backslash.
         dest = tmp_path / "env.sh"
         _write_env_sh(dest, {"FOO": 'say "hello"'})
         content = dest.read_text()
-        assert r'export FOO="say \"hello\""' in content
+        assert "export FOO='say \"hello\"'" in content
 
-    def test_escapes_backslash_in_value(self, tmp_path):
+    def test_dollar_in_value_is_literal(self, tmp_path):
+        # Regression test for issue 002 — a literal `$(uname)` must not be
+        # interpreted by the shell on source. Single-quoting guarantees that.
+        dest = tmp_path / "env.sh"
+        _write_env_sh(dest, {"FOO": "$(uname)"})
+        content = dest.read_text()
+        assert "export FOO='$(uname)'" in content
+
+    def test_single_quote_in_value_is_escaped(self, tmp_path):
+        # The only character a POSIX single-quoted string cannot contain is
+        # `'`. The writer emits it as `'\''` (close, escaped, reopen).
+        dest = tmp_path / "env.sh"
+        _write_env_sh(dest, {"FOO": "it's"})
+        content = dest.read_text()
+        assert "export FOO='it'\\''s'" in content
+
+    def test_backslash_in_value_is_literal(self, tmp_path):
+        # Single quotes mean a backslash is just a backslash — no escaping.
         dest = tmp_path / "env.sh"
         _write_env_sh(dest, {"FOO": "a\\b"})
         content = dest.read_text()
-        assert 'export FOO="a\\\\b"' in content
+        assert "export FOO='a\\b'" in content
 
     def test_roundtrip(self, tmp_path):
         dest = tmp_path / "env.sh"
@@ -218,23 +239,26 @@ class TestUnixBackendPath:
             result = backend.get_user_path()
         assert "" not in result
 
-    def test_get_user_path_empty_when_no_file(self, tmp_path):
+    def test_get_user_path_surfaces_inherit_sentinel_when_no_file(self, tmp_path):
+        # Issue 003: when env.sh has no PATH, get_user_path surfaces a
+        # `$PATH` sentinel row so the user's first add appends to, rather
+        # than replaces, the inherited PATH on the next login.
         backend = UnixBackend()
         with patch("envedit.core.platform_unix._ENVEDIT_SH", tmp_path / "missing.sh"):
             result = backend.get_user_path()
-        assert result == []
+        assert result == ["$PATH"]
 
     def test_get_user_path_does_not_clone_session_PATH(self, tmp_path):
-        # When env.sh has no PATH, get_user_path should return [] even if
-        # os.environ['PATH'] is rich. Otherwise the first apply would clone
-        # the entire merged session PATH into our managed file.
+        # When env.sh has no PATH, get_user_path returns just the sentinel
+        # even if os.environ['PATH'] is rich. Otherwise the first apply
+        # would clone the entire merged session PATH into our managed file.
         envedit_sh = tmp_path / "env.sh"
         _write_env_sh(envedit_sh, {"FOO": "bar"})  # no PATH key
         backend = UnixBackend()
         with patch("envedit.core.platform_unix._ENVEDIT_SH", envedit_sh), \
              patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}, clear=False):
             result = backend.get_user_path()
-        assert result == []
+        assert result == ["$PATH"]
 
     @pytest.mark.skipif(sys.platform == "win32", reason="os.pathsep differs on Windows")
     def test_get_system_path_parses_env_file(self, tmp_path):

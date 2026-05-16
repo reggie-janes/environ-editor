@@ -128,3 +128,29 @@ def test_double_quoted_roundtrip_with_specials():
 def test_single_quoted_does_not_unescape():
     # Single-quoted shell strings are literal — \" is two characters, not one.
     assert _parse_shell_assigns(r"FOO='a\"b'") == {"FOO": r'a\"b'}
+
+
+def test_single_quoted_embedded_quote_via_close_escape_reopen():
+    # Issue 002: the writer emits `'\''` to embed a single quote in a
+    # single-quoted value. Round-trip must decode it back to a literal `'`.
+    assert _parse_shell_assigns(r"FOO='it'\''s'") == {"FOO": "it's"}
+
+
+def test_dollar_in_single_quoted_is_literal():
+    # Issue 002: literal `$(...)` must not be expanded by the shell. We
+    # don't run the shell here, but we do verify the writer's output is
+    # single-quoted (so the shell wouldn't expand it either).
+    from envedit.core.platform_unix import _format_env_sh
+    text = _format_env_sh({"FOO": "$(uname)"})
+    assert "export FOO='$(uname)'" in text
+    assert _parse_shell_assigns(text) == {"FOO": "$(uname)"}
+
+
+def test_path_with_inherit_token_round_trips():
+    # Issue 003: PATH values containing $PATH are written with $PATH outside
+    # the single quotes (so the shell expands it) but round-trip as a single
+    # literal value with $PATH embedded.
+    from envedit.core.platform_unix import _format_env_sh
+    text = _format_env_sh({"PATH": "/opt/mybin:$PATH"})
+    assert "'/opt/mybin:'\"$PATH\"" in text
+    assert _parse_shell_assigns(text) == {"PATH": "/opt/mybin:$PATH"}
