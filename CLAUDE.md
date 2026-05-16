@@ -28,7 +28,7 @@ The codebase has three layers:
 |------|------|
 | `models/env_var_model.py` | `EnvVarModel(QAbstractListModel)`: roles Name/Value/Expanded/Pending/Deleted; staged edits in `_pending` dict; `pendingCount` Property |
 | `models/path_model.py` | `PathModel(QAbstractListModel)`: roles Path/Expanded/Status/Pending/Duplicate/Deleted; `_dirty` flag; moveUp/moveDown/moveEntry/removeDuplicates slots; `hasDuplicates` and `filterActive` properties |
-| `controllers/app_controller.py` | `AppController(QObject)`: owns all 4 models; `theme`, `isElevated`, `isBusy`, `platformName` properties; `toggleTheme`, `reloadAll`, `reloadTab`, `applyTab`, `getDiffText`, `expandValue`, `openFolder`, window-geometry slots; `errorOccurred` signal |
+| `controllers/app_controller.py` | `AppController(QObject)`: owns all 4 models; `theme`, `isElevated`, `isBusy`, `platformName` properties; `toggleTheme`, `reloadAll`, `reloadTab`, `applyTab`, `getDiffText`, `expandValue`, `openFolder`, window-geometry slots; `errorOccurred` signal (also forwards each model's `errorOccurred` to the UI snackbar) |
 
 **QML UI (`envedit/qml/`)** — Qt Quick 2 with Material style; no Python logic.
 
@@ -44,27 +44,37 @@ The codebase has three layers:
 | `components/DiffDialog.qml` | Pending-changes diff before Apply |
 | `components/Theme.qml` | Singleton color palette — 7 semantic colors with dark/light variants; all QML components read from this instead of hardcoding colors |
 
-`main.py` wires everything together. On startup it first checks for `--apply-system-file <path>` (used by the elevated child process for system writes), then launches the normal UI:
+`main.py` wires everything together. On startup it first checks for `--apply-system-base64 <b64>` (the elevated child branch on Windows — the payload is base64-encoded JSON embedded in argv, not a temp-file path, to close the TOCTOU window), then takes a `QLockFile` single-instance lock, then launches the normal UI:
 ```python
-app = QGuiApplication(sys.argv)
-_load_fonts(app)           # Roboto variable fonts from assets/
+app = QApplication(sys.argv)               # QApplication, not QGuiApplication, for QMessageBox
+_load_fonts(app)                           # Roboto variable fonts from assets/
+# QLockFile under QStandardPaths.TempLocation; tryLock(100) → second instance refuses to start
 controller = AppController()
 engine = QQmlApplicationEngine()
 engine.rootContext().setContextProperty("appController", controller)
-engine.addImportPath(str(QML_DIR))      # enables  import "components"  in QML
+engine.addImportPath(str(QML_DIR))         # enables  import "components"  in QML
 engine.load(str(QML_DIR / "main.qml"))
 ```
 
 ## Key design decisions
 
 - **Staged writes**: edits are held in model-level pending state (`_pending` dict in `EnvVarModel`, `_dirty` flag in `PathModel`) and only committed when the user clicks "Apply Changes". `pendingCount` Property drives the Apply button's enabled state via QML binding.
-- **Async elevated apply**: system-tab Apply calls `apply_system_vars`/`apply_system_path` which may return `False` (dispatched to an elevated child via `pkexec`/`runas`). The controller sets `isBusy = True` until `_elevatedApplyDone` fires from the background thread, then reloads that tab. The child receives a JSON payload via `--apply-system-file <path>`.
+- **Async elevated apply**: system-tab Apply calls `apply_system_vars`/`apply_system_path` which may return `False` (dispatched to an elevated child via `pkexec`/`runas`/`osascript`). The controller sets `isBusy = True` until `_elevatedApplyDone` fires from the background thread, then reloads that tab. On Windows the child receives a base64-encoded JSON payload via `--apply-system-base64`; on Unix `_write_as_root` runs on a worker thread when `on_complete` is provided so the password prompt doesn't freeze the GUI.
 - **Atomic user-var writes on Unix**: `_write_env_sh` writes to a `.tmp` sibling then calls `os.replace()`, which is a single `rename(2)` syscall — a kill mid-write cannot leave `env.sh` truncated.
+- **POSIX single-quoting in env.sh**: values are written as `export NAME='value'` with the standard `'\''` escape for embedded single quotes. Single-quoted POSIX strings have no escape processing, so `$`, backticks, and `$(…)` round-trip literally instead of being interpreted by the shell on source. `_decode_shell_value` in `platform_unix.py` parses concatenated quoted/unquoted runs (so older double-quoted env.sh files and the PATH inheritance pattern below both round-trip).
+- **Inherited PATH preservation**: when `~/.config/envedit/env.sh` has no `PATH` key yet, `UnixBackend.get_user_path` surfaces a `$PATH` sentinel row so the user's first edit *extends* the inherited PATH rather than replacing it. The writer special-cases PATH: `$PATH` segments stay outside the single quotes so the login shell expands them.
+- **Passthrough of unparseable lines**: `_parse_shell_assigns_with_passthrough` returns `(assigns, extras)`. The writer re-emits the extras under a `# --- preserved …` marker section, so comments / conditionals / foreign exports the user added by hand survive the next Apply.
+- **rc-file seeding**: `_ensure_sourced_in_profile` adds the source line to `~/.bashrc` and `~/.zshrc` in addition to the login profile, because most Linux terminals start interactive *non-login* shells and would otherwise never source env.sh.
+- **Single-instance enforcement**: `QLockFile` at startup refuses to launch a second EnvEdit; in addition, `fcntl.flock` wraps the user env.sh read-modify-write in `apply_user_vars` as a belt-and-braces against concurrent writers (e.g. a CLI script invoking the backend directly).
+- **Runtime-var filter on Unix**: `get_user_vars` returns the managed env.sh contents overlaid with the live values from `os.environ` for *managed* keys only. Other `os.environ` entries are surfaced only if they pass `_is_runtime_var` (filters DISPLAY, PWD, SSH_*, XDG_*, DBUS_*, TERM, LS_COLORS, …) so editing one of those doesn't accidentally write a permanent override to env.sh.
+- **Variable name validation**: `EnvVarModel` rejects names that don't match `^[A-Za-z_][A-Za-z0-9_]{0,255}$` (the same regex `_parse_shell_assigns` uses). `PathModel.addEntry` rejects entries containing `os.pathsep`, newline, or NUL. Both surface a snackbar via `errorOccurred`.
 - **Material theming**: `ApplicationWindow.Material.theme` is bound to `appController.theme`; a single property-change signal re-renders the entire UI with no palette manipulation.
 - **Null guards in QML**: all bindings that read `appController` use `appController && appController.prop` guards because QML evaluates bindings before the context property resolves.
 - **Platform isolation**: `platform_windows.py` imports `winreg`/`ctypes` only inside method bodies, never at module level. `get_backend()` in `env_backend.py` selects the right class at runtime.
 - **Case-insensitive PATH lookup on Windows**: the registry stores the key as "Path", not "PATH". `_iget()` in `platform_windows.py` does a case-insensitive dict lookup.
-- **User PATH writes on Unix** go through `apply_user_vars({"PATH": ...})` which lands in `~/.config/envedit/env.sh`. The file is auto-sourced from the user's login profile (`~/.bash_profile`, `~/.bash_login`, or `~/.profile`) on first write.
+- **Windows REG type preservation**: `_reg_type_for()` reads the existing value's type (REG_SZ vs REG_EXPAND_SZ) and re-uses it on write so EnvEdit doesn't silently upgrade values written by other tools. For new keys, it picks REG_EXPAND_SZ only when the value contains a likely `%…%` pair.
+- **Windows elevation wait**: `privilege.request_elevation_and_apply` polls `WaitForSingleObject` with a 1 s interval and no upper bound, so a slow UAC consent (password lookup, fingerprint scan) won't trigger a spurious "timed out" reload while the elevated child is still mid-write.
+- **User PATH writes on Unix** go through `apply_user_vars({"PATH": ...})` which lands in `~/.config/envedit/env.sh`. The file is auto-sourced from the user's login profile (`~/.bash_profile`, `~/.bash_login`, or `~/.profile`) on first write, plus `~/.bashrc` / `~/.zshrc` if present.
 - **System writes on Unix** go to `/etc/profile.d/envedit.sh` (not `/etc/environment`), which EnvEdit owns end-to-end and can safely rewrite without corrupting foreign content managed by distro packages or cloud-init.
 
 ## Adding a new platform
