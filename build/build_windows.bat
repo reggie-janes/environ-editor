@@ -41,7 +41,6 @@ python -m nuitka ^
   --noinclude-dlls=opengl32sw.dll ^
   --noinclude-dlls=libcrypto-*.dll ^
   --noinclude-dlls=libssl-*.dll ^
-  --noinclude-dlls=*Qt6Network* ^
   --noinclude-qt-plugins=tls ^
   --windows-console-mode=disable ^
   --windows-icon-from-ico=assets\environ-editor.ico ^
