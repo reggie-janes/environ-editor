@@ -176,8 +176,13 @@ class TestAddVariable:
         populated_model.addVariable("NEWVAR", "newval")
         assert populated_model.pendingCount == 1
 
-    def test_add_existing_variable_stages_edit(self, populated_model):
-        populated_model.addVariable("ALPHA", "updated")
+    def test_add_existing_variable_replaces_and_notifies(self, populated_model, qtbot):
+        # Issue 014: collisions used to silently overwrite the existing row.
+        # New behaviour: the value is replaced (preserving the convenience of
+        # treating "Add" as upsert) but an informational message tells the
+        # user that an existing variable was replaced rather than created.
+        with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
+            populated_model.addVariable("ALPHA", "updated")
         assert populated_model.pendingCount == 1
         pending = populated_model.getPendingChanges()
         assert pending["ALPHA"] == "updated"

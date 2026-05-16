@@ -1,7 +1,19 @@
 from __future__ import annotations
 
+import re
+
 from PySide6.QtCore import (
     QAbstractListModel, QModelIndex, Qt, Signal, Slot, Property
+)
+
+
+# Identifier rules matching the Unix env.sh parser: first char letter or
+# underscore, rest alphanumeric or underscore. Capped at 256 chars to keep
+# the UI sane (registry max is much larger but no real var needs it).
+_VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,255}$")
+_VAR_NAME_HELP = (
+    "Names must start with a letter or underscore and contain only letters, "
+    "digits, or underscores."
 )
 
 
@@ -77,8 +89,17 @@ class EnvVarModel(QAbstractListModel):
         name = name.strip()
         if not name:
             return
+        if not _VAR_NAME_RE.match(name):
+            self.errorOccurred.emit(f"Invalid variable name '{name}'. {_VAR_NAME_HELP}")
+            return
         if name in self._by_name:
+            # Issue 014: replace the existing row's value with the new one,
+            # but emit a notification so the user knows an existing variable
+            # was overwritten rather than a fresh row being created.
             self._stage(name, value)
+            self.errorOccurred.emit(
+                f"'{name}' already existed — its value was replaced."
+            )
             return
         new_row = {"name": name, "value": ""}
         self._rows.append(new_row)
@@ -88,6 +109,10 @@ class EnvVarModel(QAbstractListModel):
         self._new_names.add(name)
         self._reset()
 
+    @Slot(str, result=bool)
+    def hasVariable(self, name: str) -> bool:
+        return name.strip() in self._by_name
+
     @Slot(int, str, str)
     def editVariable(self, index: int, name: str, value: str) -> None:
         rows = self._visible_rows()
@@ -95,19 +120,43 @@ class EnvVarModel(QAbstractListModel):
             return
         orig_name = rows[index]["name"]
         if orig_name != name:
-            # Refuse the rename if the target name already exists — silently
-            # overwriting another variable would discard its value with no
-            # warning.
-            if name in self._by_name:
+            if not _VAR_NAME_RE.match(name):
                 self.errorOccurred.emit(
-                    f"A variable named '{name}' already exists."
+                    f"Invalid variable name '{name}'. {_VAR_NAME_HELP}"
                 )
-                # Snap just this row's name field back to model.name. A full
-                # _reset() would rebuild the ListView's delegates and scroll
-                # back to index 0, losing the user's scroll position and
-                # focus.
                 mi = self.index(index, 0)
                 self.dataChanged.emit(mi, mi, [self.NameRole])
+                return
+            collided = self._by_name.get(name)
+            if collided is not None:
+                is_pending_deleted = (
+                    name in self._pending and self._pending[name] is None
+                )
+                if not is_pending_deleted:
+                    # Live collision (the name belongs to a non-deleted row).
+                    # Refuse rather than silently overwrite the other row.
+                    self.errorOccurred.emit(
+                        f"A variable named '{name}' already exists."
+                    )
+                    mi = self.index(index, 0)
+                    self.dataChanged.emit(mi, mi, [self.NameRole])
+                    return
+                # Target name is pending-deleted (the user renamed B→A and is
+                # now renaming A back to B, or similar). Undelete it and
+                # stage a value edit so the rename round-trips to a restore.
+                del self._pending[name]
+                if orig_name in self._new_names:
+                    # The "new" row B was scratch; drop it entirely.
+                    self._rows.remove(self._by_name[orig_name])
+                    del self._by_name[orig_name]
+                    del self._pending[orig_name]
+                    self._new_names.discard(orig_name)
+                else:
+                    # The original row carries the deletion mark; clear it.
+                    self._pending.pop(orig_name, None)
+                if value != collided["value"]:
+                    self._pending[name] = value
+                self._reset()
                 return
             if orig_name in self._new_names:
                 self._rows.remove(self._by_name[orig_name])
