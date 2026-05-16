@@ -47,13 +47,39 @@ def _maybe_run_elevated_apply() -> bool:
 def main() -> None:
     _maybe_run_elevated_apply()
 
-    from PySide6.QtCore import QUrl
+    from PySide6.QtCore import QUrl, QLockFile, QStandardPaths, QDir
     from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
+    from PySide6.QtWidgets import QApplication, QMessageBox
 
-    app = QGuiApplication(sys.argv)
+    # QApplication (not QGuiApplication) so QMessageBox is available for the
+    # single-instance prompt below. The rest of the UI is QML so the extra
+    # Widgets dependency is paid only for this one dialog.
+    app = QApplication(sys.argv)
     app.setApplicationName("EnvEdit")
     app.setOrganizationName("EnvEdit")
+
+    # Single-instance enforcement. Two EnvEdits writing concurrently would
+    # otherwise each read env.sh / the registry, apply their own pending
+    # edits, and the later writer would silently clobber the earlier one's
+    # changes. The lock lives under the per-user temp location so it's
+    # cleaned up automatically on logout.
+    runtime_dir = QStandardPaths.writableLocation(QStandardPaths.TempLocation)
+    QDir(runtime_dir).mkpath(".")
+    lock_path = os.path.join(runtime_dir, "envedit.lock")
+    lock_file = QLockFile(lock_path)
+    lock_file.setStaleLockTime(0)
+    if not lock_file.tryLock(100):
+        QMessageBox.information(
+            None,
+            "EnvEdit already running",
+            "Another instance of EnvEdit is already open. Switch to it and "
+            "make your changes there.",
+        )
+        sys.exit(0)
+    # Keep `lock_file` referenced for the process lifetime; QLockFile releases
+    # the lock in its destructor.
+    app._envedit_lock = lock_file  # type: ignore[attr-defined]
 
     _load_fonts(app)
 
