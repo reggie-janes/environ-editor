@@ -88,3 +88,27 @@ Tests live in `tests/`. `conftest.py` sets `QT_QPA_PLATFORM=offscreen` so Qt can
 - Qt native libs (`libgl1`, `libegl1`, xcb libs, etc.) are installed via the Dockerfile. If you add a dependency that needs a new system lib, add it there and rebuild the container.
 - The `.venv` directory lives in a named Docker volume; it survives `Rebuild Container` as long as the volume is not deleted.
 - For UI-less testing set `QPA_PLATFORM=offscreen`.
+
+## Packaging (Nuitka)
+
+Build scripts live in `build/`. CI invokes `build_windows.bat`, `build_linux.sh`, and `build_macos.sh` from `.github/workflows/build.yml`. The `build` extra in `pyproject.toml` is `nuitka[onefile]` (not bare `nuitka`) — the `[onefile]` is what pulls in `zstandard`. Without it Nuitka emits an uncompressed onefile and the .exe is ~5× larger than it should be.
+
+**Qt module / DLL exclusion patterns differ by platform:**
+
+| Platform | Library naming | Pattern that catches it |
+|----------|----------------|-------------------------|
+| Windows  | `Qt6WebEngineCore.dll` | `*Qt6WebEngine*` |
+| Linux    | `libQt6WebEngineCore.so.6.7.2` | `*Qt6WebEngine*` |
+| macOS    | `QtWebEngineCore.framework/Versions/A/QtWebEngineCore` | `*WebEngine*` *(no Qt6 prefix in framework binary names)* |
+
+The build scripts include both `*Qt6Foo*` and `*Foo*`/`QtFoo*` variants so the same exclusion intent applies everywhere. If you add a new exclude, add both forms.
+
+Excluding a framework's binary on macOS cascades to skipping the whole framework directory (Resources/, helper `.app` bundles, locale `.pak` files). No separate `--noinclude-data-files` for framework subtrees is needed.
+
+Beyond top-level Qt DLLs, the per-module **QML plugins** under `qml/<Module>/<plugin>.dll` have completely different names (`qtwebenginequickplugin.dll`, not `Qt6WebEngine*`) and need their own exclusion patterns.
+
+Two things that *cannot* be excluded without breaking the launch:
+- `Qt6Network.dll` — Qt initializes it during QML engine setup even when the app does no networking.
+- `Qt6OpenGL.dll` / `QtOpenGL.pyd` — Qt's RHI soft-loads it on Windows even when D3D11 is the active scene-graph backend.
+
+Both were tried; both broke the build silently (CI succeeded, .exe failed to launch). See git history for `Revert "Exclude Qt6Network"` and `Revert "Exclude Qt6OpenGL"`.
