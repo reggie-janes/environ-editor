@@ -67,11 +67,13 @@ class TestGetDiffText:
         assert controller.getDiffText(0) == ""
         assert controller.getDiffText(2) == ""
 
-    def test_diff_path_always_shows_entries(self, controller):
-        # Path diffs show the full current list (order matters), not just deltas
+    def test_diff_path_empty_when_no_changes(self, controller):
+        # Issue 013: PATH diffs show changes only — the old behaviour was to
+        # dump the full post-apply list, which made it impossible to tell a
+        # small edit from a full wipe.
         diff = controller.getDiffText(1)
-        assert "/usr/bin" in diff
-        assert "/bin" in diff
+        assert "/usr/bin" not in diff
+        assert "no changes" in diff
 
     def test_diff_user_vars_edit(self, controller):
         controller.userVarModel.editVariable(0, "BAR", "new_val")
@@ -103,9 +105,12 @@ class TestGetDiffText:
     def test_diff_invalid_idx_returns_empty(self, controller):
         assert controller.getDiffText(99) == ""
 
-    def test_diff_path_includes_index(self, controller):
+    def test_diff_path_shows_added_entry(self, controller):
+        # Adding a new entry should appear as an ADD line with position info.
+        controller.userPathModel.addEntry("/added/bin")
         diff = controller.getDiffText(1)
-        assert "1." in diff  # "  1.  /usr/bin"
+        assert "ADD" in diff
+        assert "/added/bin" in diff
 
     def test_set_var_diff_format(self, controller):
         controller.userVarModel.editVariable(0, "BAR", "newval")

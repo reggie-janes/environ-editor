@@ -130,13 +130,30 @@ def request_elevation_and_apply(changes: dict, on_complete: Callable[..., None] 
     hProcess = sei.hProcess
     if on_complete and hProcess:
         WAIT_TIMEOUT = 0x102
+        WAIT_OBJECT_0 = 0x0
+        # Wait indefinitely for the elevated child to exit. UAC consent is
+        # user-driven (looking up a password, scanning a fingerprint) so a
+        # short fixed timeout was effectively arbitrary: a slow user would
+        # see "elevated apply timed out" while the registry write was still
+        # in flight. Polling lets us hold the spinner until the work is
+        # genuinely done. (If the user cancels via task manager, the wait
+        # still completes and isBusy clears.)
         def _wait_and_notify():
-            ret = ctypes.windll.kernel32.WaitForSingleObject(hProcess, 30000)
-            ctypes.windll.kernel32.CloseHandle(hProcess)
-            # Call on_complete regardless of timeout so isBusy always clears.
-            # If timed out, the reload may show stale data, but that's better
-            # than a stuck spinner — the elevated child likely hung.
-            on_complete(timed_out=(ret == WAIT_TIMEOUT))
+            try:
+                while True:
+                    ret = ctypes.windll.kernel32.WaitForSingleObject(
+                        hProcess, 1000
+                    )
+                    if ret == WAIT_OBJECT_0:
+                        on_complete(timed_out=False)
+                        return
+                    if ret != WAIT_TIMEOUT:
+                        # Wait failure of some other kind — give up rather
+                        # than spin forever.
+                        on_complete(timed_out=True)
+                        return
+            finally:
+                ctypes.windll.kernel32.CloseHandle(hProcess)
         threading.Thread(target=_wait_and_notify, daemon=True).start()
     elif hProcess:
         ctypes.windll.kernel32.CloseHandle(hProcess)

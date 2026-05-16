@@ -30,8 +30,10 @@ class AppController(QObject):
         self._user_path_model  = PathModel(expand_fn=expand)
         self._system_path_model = PathModel(expand_fn=expand)
 
-        # Forward model-level errors (e.g. rename collisions) to the UI.
-        for m in (self._user_var_model, self._system_var_model):
+        # Forward model-level errors (e.g. rename collisions, invalid PATH
+        # entries) to the UI's snackbar.
+        for m in (self._user_var_model, self._system_var_model,
+                  self._user_path_model, self._system_path_model):
             m.errorOccurred.connect(self.errorOccurred)
 
         self._elevatedApplyDone.connect(self._onElevatedApplyDone)
@@ -211,7 +213,12 @@ class AppController(QObject):
         self._is_busy = False
         self.isBusyChanged.emit()
         if timed_out:
-            self.errorOccurred.emit("Elevated apply timed out — the process may have hung.")
+            # Reloading on timeout would show stale state and obscure the
+            # message — surface the error only.
+            self.errorOccurred.emit(
+                "Elevated apply did not complete — see system logs."
+            )
+            return
         self._reload(idx)
 
     def _reload(self, idx: int) -> None:
@@ -233,7 +240,31 @@ class AppController(QObject):
 
     @staticmethod
     def _path_diff(model: PathModel) -> str:
-        return "\n".join(f"  {i+1}.  {e}" for i, e in enumerate(model.getEntries()))
+        # Show ADD/REMOVE/MOVE/EDIT lines diffed against the original snapshot
+        # instead of dumping the whole post-apply list. The previous behaviour
+        # made it impossible to tell from the dialog whether the apply was a
+        # one-line tweak or a full wipe.
+        new_entries = model.getEntries()
+        old_entries = list(model._original)  # PathModel._original is the snapshot
+        old_set = set(old_entries)
+        new_set = set(new_entries)
+        old_pos = {p: i for i, p in enumerate(old_entries)}
+        new_pos = {p: i for i, p in enumerate(new_entries)}
+        lines: list[str] = []
+        for path in new_entries:
+            if path not in old_set:
+                lines.append(f"  ADD     {path}  (position {new_pos[path] + 1})")
+        for path in old_entries:
+            if path not in new_set:
+                lines.append(f"  REMOVE  {path}  (was position {old_pos[path] + 1})")
+        for path in new_entries:
+            if path in old_set and old_pos[path] != new_pos[path]:
+                lines.append(
+                    f"  MOVE    {path}  : {old_pos[path] + 1} → {new_pos[path] + 1}"
+                )
+        if not lines:
+            lines.append("  (no changes)")
+        return "\n".join(lines)
 
     @staticmethod
     def _detect_os_theme() -> str:
