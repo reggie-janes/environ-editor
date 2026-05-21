@@ -240,30 +240,34 @@ class AppController(QObject):
 
     @staticmethod
     def _path_diff(model: PathModel) -> str:
-        # Show ADD/REMOVE/MOVE/EDIT lines diffed against the original snapshot
-        # instead of dumping the whole post-apply list. The previous behaviour
-        # made it impossible to tell from the dialog whether the apply was a
-        # one-line tweak or a full wipe.
-        new_entries = model.getEntries()
-        old_entries = list(model._original)  # PathModel._original is the snapshot
-        old_set = set(old_entries)
-        new_set = set(new_entries)
-        old_pos = {p: i for i, p in enumerate(old_entries)}
-        new_pos = {p: i for i, p in enumerate(new_entries)}
+        # ADD/REMOVE/EDIT/MOVE lines from the model's structured per-entry diff.
+        # The set-based approach this replaced collapsed duplicates, so deleting
+        # one of two identical entries showed "(no changes)".
+        ops = model.getDiffOperations()
+        if not ops:
+            return "  (no changes)"
         lines: list[str] = []
-        for path in new_entries:
-            if path not in old_set:
-                lines.append(f"  ADD     {path}  (position {new_pos[path] + 1})")
-        for path in old_entries:
-            if path not in new_set:
-                lines.append(f"  REMOVE  {path}  (was position {old_pos[path] + 1})")
-        for path in new_entries:
-            if path in old_set and old_pos[path] != new_pos[path]:
+        for op in ops:
+            kind = op["op"]
+            if kind == "add":
+                lines.append(f"  ADD     {op['path']}  (position {op['new_pos'] + 1})")
+            elif kind == "remove":
+                lines.append(f"  REMOVE  {op['path']}  (was position {op['old_pos'] + 1})")
+            elif kind == "edit":
+                if op["old_pos"] != op["new_pos"]:
+                    lines.append(
+                        f"  EDIT    {op['old_path']} → {op['new_path']}  "
+                        f"(position {op['old_pos'] + 1} → {op['new_pos'] + 1})"
+                    )
+                else:
+                    lines.append(
+                        f"  EDIT    {op['old_path']} → {op['new_path']}  "
+                        f"(position {op['new_pos'] + 1})"
+                    )
+            elif kind == "move":
                 lines.append(
-                    f"  MOVE    {path}  : {old_pos[path] + 1} → {new_pos[path] + 1}"
+                    f"  MOVE    {op['path']}  : {op['old_pos'] + 1} → {op['new_pos'] + 1}"
                 )
-        if not lines:
-            lines.append("  (no changes)")
         return "\n".join(lines)
 
     @staticmethod

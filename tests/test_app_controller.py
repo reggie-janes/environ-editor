@@ -118,6 +118,78 @@ class TestGetDiffText:
         assert "SET" in diff
         assert "=" in diff
 
+    def test_diff_path_edit_emits_edit_line(self, controller):
+        # Editing an entry's value should show as a single EDIT line, not as
+        # a misleading ADD+REMOVE pair (the previous set-based diff couldn't
+        # tell edits from add/remove and reported both).
+        controller.userPathModel.editEntry(0, "/usr/local/bin")
+        diff = controller.getDiffText(1)
+        assert "EDIT" in diff
+        assert "/usr/bin" in diff           # old value
+        assert "/usr/local/bin" in diff     # new value
+        assert "ADD" not in diff
+        assert "REMOVE" not in diff
+
+
+# ---------------------------------------------------------------------------
+# Path diff with duplicates
+# ---------------------------------------------------------------------------
+
+class TestPathDiffWithDuplicates:
+    """Regression tests: duplicate PATH entries used to make the diff dialog
+    show "(no changes)" or misattribute add/delete/edit because the diff was
+    built from set membership, which collapses duplicates."""
+
+    @pytest.fixture
+    def dup_controller(self, qapp):
+        backend = MagicMock()
+        backend.get_user_vars.return_value = {}
+        backend.get_system_vars.return_value = {}
+        backend.get_user_path.return_value = ["/a", "/b", "/a"]   # duplicated /a
+        backend.get_system_path.return_value = []
+        backend.expand_value.side_effect = lambda v: v
+        with patch("envedit.controllers.app_controller.get_backend", return_value=backend), \
+             patch("envedit.controllers.app_controller.QSettings") as mock_settings:
+            mock_settings.return_value.value.return_value = ""
+            return AppController()
+
+    def test_delete_one_of_two_duplicates_shows_remove(self, dup_controller):
+        # Delete the second /a (index 2). Old behaviour: "/a" still in new_set,
+        # so the diff said "(no changes)".
+        dup_controller.userPathModel.deleteEntry(2)
+        diff = dup_controller.getDiffText(1)
+        assert "REMOVE" in diff
+        assert "/a" in diff
+        assert "position 3" in diff   # the 2nd /a was at original index 2 (1-indexed: 3)
+        assert "no changes" not in diff
+
+    def test_delete_first_of_two_duplicates_shows_correct_position(self, dup_controller):
+        # Delete the first /a (index 0).
+        dup_controller.userPathModel.deleteEntry(0)
+        diff = dup_controller.getDiffText(1)
+        assert "REMOVE" in diff
+        assert "position 1" in diff   # first /a was at original index 0
+
+    def test_add_duplicate_of_existing_shows_add(self, dup_controller):
+        # Adding another /b should show ADD even though /b already exists.
+        dup_controller.userPathModel.addEntry("/b")
+        diff = dup_controller.getDiffText(1)
+        assert "ADD" in diff
+        assert "/b" in diff
+        # No spurious MOVE for the original /b
+        assert "MOVE" not in diff
+
+    def test_edit_one_of_duplicates_shows_single_edit(self, dup_controller):
+        # Edit the second /a → /c. Old behaviour: ADD /c + spurious diff because
+        # /a still in new_set so no REMOVE.
+        dup_controller.userPathModel.editEntry(2, "/c")
+        diff = dup_controller.getDiffText(1)
+        assert "EDIT" in diff
+        assert "/a" in diff and "/c" in diff
+        assert "REMOVE" not in diff
+        # The first /a should be untouched.
+        assert diff.count("EDIT") == 1
+
 
 # ---------------------------------------------------------------------------
 # applyTab
