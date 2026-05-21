@@ -181,11 +181,22 @@ class TestAddVariable:
         # New behaviour: the value is replaced (preserving the convenience of
         # treating "Add" as upsert) but an informational message tells the
         # user that an existing variable was replaced rather than created.
+        errors = []
+        populated_model.errorOccurred.connect(errors.append)
         with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
             populated_model.addVariable("ALPHA", "updated")
         assert populated_model.pendingCount == 1
         pending = populated_model.getPendingChanges()
         assert pending["ALPHA"] == "updated"
+        assert "replaced" in errors[0]
+
+    def test_add_existing_variable_same_value_reports_no_change(self, populated_model, qtbot):
+        errors = []
+        populated_model.errorOccurred.connect(errors.append)
+        with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
+            populated_model.addVariable("ALPHA", "aval")  # same as original
+        assert populated_model.pendingCount == 0
+        assert "nothing changed" in errors[0].lower()
 
     def test_add_empty_name_is_noop(self, populated_model):
         before = populated_model.rowCount()

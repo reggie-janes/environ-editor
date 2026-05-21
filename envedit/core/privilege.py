@@ -77,20 +77,19 @@ def request_elevation_and_apply(changes: dict, on_complete: Callable[..., None] 
         json.dumps(changes).encode("utf-8")
     ).decode("ascii")
 
-    # CreateProcess limit on Windows is 32767 wide chars including args and
-    # the trailing NUL. Even an unusually long HKLM PATH (~8 KB) base64s to
-    # ~11 KB, well under the limit, so this is fine in practice. Reject
-    # anything large enough to flirt with the cap so we fail loudly rather
-    # than silently truncating arguments at the OS boundary.
-    if len(payload_b64) > 30000:
-        raise ValueError(
-            f"Elevation payload too large for command line "
-            f"({len(payload_b64)} chars); refusing to apply."
-        )
-
     params = subprocess.list2cmdline(
         [sys.argv[0], "--apply-system-base64", payload_b64]
     )
+
+    # CreateProcess limit on Windows is 32767 wide chars including args and
+    # the trailing NUL. Measure the assembled command line (not just the
+    # payload) so that a long executable path + quoting overhead don't push
+    # us past the limit silently.
+    if len(params) > 32_000:
+        raise ValueError(
+            f"Elevation command line too large ({len(params)} chars); "
+            f"refusing to apply. Consider splitting the change."
+        )
 
     SEE_MASK_NOCLOSEPROCESS = 0x00000040
 

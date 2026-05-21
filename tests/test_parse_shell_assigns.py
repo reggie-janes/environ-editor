@@ -96,9 +96,18 @@ def test_export_with_extra_spaces():
     assert result == {"FOO": "bar"}
 
 
-def test_value_with_dollar():
+def test_value_with_dollar_is_passthrough():
+    # Unquoted $VAR in the RHS is not parsed — it goes to the passthrough
+    # block so the line is re-emitted verbatim and $HOME stays expandable.
     result = _parse_shell_assigns("FOO=$HOME/bin")
-    assert result == {"FOO": "$HOME/bin"}
+    assert result == {}
+
+
+def test_value_with_dollar_preserved_as_extra():
+    from envedit.core.platform_unix import _parse_shell_assigns_with_passthrough
+    parsed, extras = _parse_shell_assigns_with_passthrough("FOO=$HOME/bin")
+    assert parsed == {}
+    assert extras == ["FOO=$HOME/bin"]
 
 
 def test_quoted_value_with_dollar():

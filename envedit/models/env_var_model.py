@@ -93,13 +93,16 @@ class EnvVarModel(QAbstractListModel):
             self.errorOccurred.emit(f"Invalid variable name '{name}'. {_VAR_NAME_HELP}")
             return
         if name in self._by_name:
-            # Issue 014: replace the existing row's value with the new one,
-            # but emit a notification so the user knows an existing variable
-            # was overwritten rather than a fresh row being created.
+            existing_val = self._by_name[name]["value"]
             self._stage(name, value)
-            self.errorOccurred.emit(
-                f"'{name}' already existed — its value was replaced."
-            )
+            if value == existing_val and name not in self._new_names:
+                self.errorOccurred.emit(
+                    f"'{name}' already exists with that value — nothing changed."
+                )
+            else:
+                self.errorOccurred.emit(
+                    f"'{name}' already existed — its value was replaced."
+                )
             return
         new_row = {"name": name, "value": ""}
         self._rows.append(new_row)

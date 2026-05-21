@@ -1,11 +1,37 @@
 from __future__ import annotations
 
+import bisect
 import os
 from collections import Counter
 
 from PySide6.QtCore import (
     QAbstractListModel, QModelIndex, Qt, Signal, Slot, Property
 )
+
+
+def _lis_values(seq: list[int]) -> set[int]:
+    """Return the set of values that appear in a longest increasing subsequence."""
+    if not seq:
+        return set()
+    n = len(seq)
+    tails: list[int] = []          # smallest tail for subsequences of each length
+    prev_idx: list[int] = [-1] * n # predecessor index in seq for each element
+    tail_seq_idx: list[int] = []   # which seq index set each tail
+    for i, x in enumerate(seq):
+        pos = bisect.bisect_left(tails, x)
+        if pos == len(tails):
+            tails.append(x)
+            tail_seq_idx.append(i)
+        else:
+            tails[pos] = x
+            tail_seq_idx[pos] = i
+        prev_idx[i] = tail_seq_idx[pos - 1] if pos > 0 else -1
+    result: set[int] = set()
+    idx = tail_seq_idx[-1]
+    while idx != -1:
+        result.add(seq[idx])
+        idx = prev_idx[idx]
+    return result
 
 
 def _path_rejection_reason(path: str) -> str | None:
@@ -135,6 +161,13 @@ class PathModel(QAbstractListModel):
         entry = self._entries[real[index]]
         if entry["path"] == path:
             return
+        reason = _path_rejection_reason(path)
+        if reason is not None:
+            self.errorOccurred.emit(reason)
+            # Rebind the field to the current stored value.
+            if self.rowCount() > 0:
+                self.dataChanged.emit(self.index(0), self.index(self.rowCount() - 1))
+            return
         if entry["original"] is None and not entry["is_new"]:
             entry["original"] = entry["path"]
         entry["path"] = path
@@ -226,13 +259,23 @@ class PathModel(QAbstractListModel):
     @Slot()
     def removeDuplicates(self) -> None:
         seen: set[str] = set()
-        deduped = []
+        changed = False
+        survivors: list[dict] = []
         for e in self._entries:
-            if e["path"] not in seen:
+            if e["path"] in seen:
+                if e["is_new"]:
+                    # Scratch row; drop it entirely — no original position to record.
+                    changed = True
+                    continue
+                # Original duplicate — soft-delete so getDiffOperations reports
+                # a REMOVE op with the correct old_pos for the diff dialog.
+                e["is_deleted"] = True
+                changed = True
+            else:
                 seen.add(e["path"])
-                deduped.append(e)
-        if len(deduped) != len(self._entries):
-            self._entries = deduped
+            survivors.append(e)
+        if changed:
+            self._entries = survivors
             self._recalculate_dirty()
             self._refresh_dup_counts()
             self._reset()
@@ -282,14 +325,26 @@ class PathModel(QAbstractListModel):
         is used instead of comparing path strings so duplicates round-trip
         correctly — deleting one of two identical entries reports REMOVE for
         the row the user clicked, not "(no changes)".
+
+        MOVE detection uses the longest increasing subsequence (LIS) of
+        original_index values among pure survivors. Survivors whose
+        original_index is in the LIS preserved their relative order and get
+        no MOVE; only entries that left the LIS are emitted as moves.
+        This collapses "N entries shifted by 1 deliberate move" into a
+        single MOVE op instead of N spurious ones.
         """
         ops: list[dict] = []
-        deleted_orig_indices = sorted(
-            e["original_index"] for e in self._entries
-            if e["is_deleted"] and e["original_index"] is not None
-        )
-        new_pos = 0           # position in the post-apply (non-deleted) list
-        new_before = 0        # count of is_new entries seen so far in current order
+
+        # Build the LIS over pure survivors (non-new, non-deleted, unedited)
+        # to determine which entries preserved their relative order.
+        pure_orig_indices = [
+            e["original_index"]
+            for e in self._entries
+            if not e["is_deleted"] and not e["is_new"] and e["original"] is None
+        ]
+        lis = _lis_values(pure_orig_indices)
+
+        new_pos = 0
         for entry in self._entries:
             if entry["is_deleted"]:
                 old_path = entry["original"] if entry["original"] is not None else entry["path"]
@@ -303,7 +358,6 @@ class PathModel(QAbstractListModel):
             new_pos += 1
             if entry["is_new"]:
                 ops.append({"op": "add", "path": entry["path"], "new_pos": current_pos})
-                new_before += 1
                 continue
             orig_idx = entry["original_index"]
             if entry["original"] is not None:
@@ -314,14 +368,10 @@ class PathModel(QAbstractListModel):
                     "old_pos": orig_idx,
                     "new_pos": current_pos,
                 })
-                # Skip a separate MOVE on edited entries — the EDIT line already
-                # carries the position change.
+                # EDIT already carries the position change; skip a separate MOVE.
                 continue
-            # Survivor: detect move by comparing actual position to where the
-            # entry would land if only ADDs/REMOVEs happened around it.
-            deletions_before = sum(1 for d in deleted_orig_indices if d < orig_idx)
-            expected_pos = orig_idx - deletions_before + new_before
-            if expected_pos != current_pos:
+            # Pure survivor: emit MOVE only if not in the LIS.
+            if orig_idx not in lis:
                 ops.append({
                     "op": "move",
                     "path": entry["path"],

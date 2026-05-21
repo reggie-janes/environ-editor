@@ -18,6 +18,27 @@ def _iget(d: dict[str, str], key: str, default: str = "") -> str:
     return next((v for k, v in d.items() if k.upper() == key_upper), default)
 
 
+def _stored_name(key, requested: str) -> str:
+    """Return the case-preserved value name already in the registry.
+
+    SetValueEx is case-insensitive for matching but case-preserving for
+    storage: passing a different case renames the value. Re-using the
+    already-stored name avoids silently renaming `Path` to `PATH` (or any
+    other mixed-case name written by Windows or third-party tools).
+    """
+    import winreg
+    target = requested.lower()
+    i = 0
+    while True:
+        try:
+            name, _data, _kind = winreg.EnumValue(key, i)
+        except OSError:
+            return requested
+        if name.lower() == target:
+            return name
+        i += 1
+
+
 class WindowsBackend(EnvBackend):
     def get_user_vars(self) -> dict[str, str]:
         return {k: v for k, v in self._read_hkcu().items() if k.upper() != "PATH"}
@@ -38,14 +59,15 @@ class WindowsBackend(EnvBackend):
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _HKCU_ENV, 0,
                             winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
             for name, val in changes.items():
+                stored = _stored_name(key, name)
                 if val is None:
                     try:
-                        winreg.DeleteValue(key, name)
+                        winreg.DeleteValue(key, stored)
                     except FileNotFoundError:
                         pass
                 else:
-                    winreg.SetValueEx(key, name, 0,
-                                      self._reg_type_for(key, name, val), val)
+                    winreg.SetValueEx(key, stored, 0,
+                                      self._reg_type_for(key, stored, val), val)
         self._broadcast_change()
 
     def apply_system_vars(self, changes: dict[str, str | None], on_complete=None) -> bool:
@@ -58,14 +80,15 @@ class WindowsBackend(EnvBackend):
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _HKLM_ENV, 0,
                             winreg.KEY_READ | winreg.KEY_SET_VALUE) as key:
             for name, val in changes.items():
+                stored = _stored_name(key, name)
                 if val is None:
                     try:
-                        winreg.DeleteValue(key, name)
+                        winreg.DeleteValue(key, stored)
                     except FileNotFoundError:
                         pass
                 else:
-                    winreg.SetValueEx(key, name, 0,
-                                      self._reg_type_for(key, name, val), val)
+                    winreg.SetValueEx(key, stored, 0,
+                                      self._reg_type_for(key, stored, val), val)
         self._broadcast_change()
         return True
 

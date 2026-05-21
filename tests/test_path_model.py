@@ -180,6 +180,17 @@ class TestEditEntry:
         idx = populated_model.index(0)
         assert populated_model.data(idx, PathModel.PendingRole) is True
 
+    def test_edit_to_empty_emits_error_and_rejects(self, populated_model, qtbot):
+        with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
+            populated_model.editEntry(0, "")
+        assert populated_model.pendingCount == 0
+        assert populated_model.getEntries()[0] == "/usr/bin"
+
+    def test_edit_with_pathsep_emits_error_and_rejects(self, populated_model, qtbot):
+        with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
+            populated_model.editEntry(0, "/usr/bin:/opt/bin")
+        assert populated_model.pendingCount == 0
+
     def test_revert_edit_clears_pending(self, populated_model):
         populated_model.editEntry(0, "/changed")
         populated_model.editEntry(0, "/usr/bin")
@@ -319,6 +330,50 @@ class TestMoveEntry:
 
 
 # ---------------------------------------------------------------------------
+# getDiffOperations — MOVE detection
+# ---------------------------------------------------------------------------
+
+class TestGetDiffOperations:
+    def test_single_move_produces_one_op(self, qapp):
+        m = PathModel()
+        m.loadData(["/a", "/b", "/c", "/d"])
+        m.moveEntry(3, 0)  # move /d to the front
+        ops = m.getDiffOperations()
+        move_ops = [o for o in ops if o["op"] == "move"]
+        assert len(move_ops) == 1
+        assert move_ops[0]["path"] == "/d"
+        assert move_ops[0]["old_pos"] == 3
+        assert move_ops[0]["new_pos"] == 0
+
+    def test_move_and_delete_no_spurious_ops(self, qapp):
+        m = PathModel()
+        m.loadData(["/a", "/b", "/c", "/d"])
+        m.deleteEntry(1)        # soft-delete /b (index 1)
+        m.moveEntry(3, 0)       # move /d (index 3 in _entries) to position 0
+        ops = m.getDiffOperations()
+        move_ops = [o for o in ops if o["op"] == "move"]
+        remove_ops = [o for o in ops if o["op"] == "remove"]
+        assert len(move_ops) == 1
+        assert len(remove_ops) == 1
+        assert move_ops[0]["path"] == "/d"
+        assert remove_ops[0]["path"] == "/b"
+
+    def test_no_changes_produces_no_ops(self, qapp):
+        m = PathModel()
+        m.loadData(["/a", "/b", "/c"])
+        assert m.getDiffOperations() == []
+
+    def test_delete_produces_remove_not_move(self, qapp):
+        m = PathModel()
+        m.loadData(["/a", "/b", "/c", "/d"])
+        m.deleteEntry(1)
+        ops = m.getDiffOperations()
+        assert all(o["op"] != "move" for o in ops)
+        remove_ops = [o for o in ops if o["op"] == "remove"]
+        assert len(remove_ops) == 1
+
+
+# ---------------------------------------------------------------------------
 # removeDuplicates
 # ---------------------------------------------------------------------------
 
@@ -327,8 +382,19 @@ class TestRemoveDuplicates:
         m = PathModel()
         m.loadData(["/usr/bin", "/bin", "/usr/bin"])
         m.removeDuplicates()
-        assert m.rowCount() == 2
+        # Duplicate is soft-deleted (still visible as a pending-deleted row).
+        assert m.rowCount() == 3
         assert m.getEntries() == ["/usr/bin", "/bin"]
+
+    def test_duplicate_soft_deleted_shows_in_diff(self, qapp):
+        m = PathModel()
+        m.loadData(["/usr/bin", "/bin", "/usr/bin"])
+        m.removeDuplicates()
+        ops = m.getDiffOperations()
+        remove_ops = [o for o in ops if o["op"] == "remove"]
+        assert len(remove_ops) == 1
+        assert remove_ops[0]["path"] == "/usr/bin"
+        assert remove_ops[0]["old_pos"] == 2
 
     def test_no_duplicates_is_noop(self, populated_model):
         before = populated_model.rowCount()

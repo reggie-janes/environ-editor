@@ -136,9 +136,13 @@ def _decode_shell_value(s: str) -> str | None:
         else:
             # Unquoted run — reject whitespace and shell metacharacters so
             # we don't silently accept content the shell would interpret.
+            # '$' is rejected so that hand-edited `export FOO=$HOME/bin` is
+            # treated as passthrough rather than parsed as the literal string
+            # "$HOME/bin" and then re-emitted as `export FOO='$HOME/bin'`
+            # (which prevents shell expansion on next login).
             j = i
             while j < n and s[j] not in "'\"\\":
-                if s[j] in " \t":
+                if s[j] in " \t$":
                     return None
                 j += 1
             out.append(s[i:j])
