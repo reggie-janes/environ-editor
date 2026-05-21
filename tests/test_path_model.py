@@ -187,8 +187,9 @@ class TestEditEntry:
         assert populated_model.getEntries()[0] == "/usr/bin"
 
     def test_edit_with_pathsep_emits_error_and_rejects(self, populated_model, qtbot):
+        bad = f"/usr/bin{os.pathsep}/opt/bin"
         with qtbot.waitSignal(populated_model.errorOccurred, timeout=500):
-            populated_model.editEntry(0, "/usr/bin:/opt/bin")
+            populated_model.editEntry(0, bad)
         assert populated_model.pendingCount == 0
 
     def test_revert_edit_clears_pending(self, populated_model):
