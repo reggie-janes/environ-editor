@@ -73,7 +73,8 @@ ApplicationWindow {
 
     Connections {
         target: appController
-        function onErrorOccurred(msg) { errorBar.show(msg) }
+        function onErrorOccurred(msg) { errorBar.show(msg, true) }
+        function onInfoOccurred(msg)  { errorBar.show(msg, false) }
 
         // After Apply, ask the OS to bring our window back to front. On
         // Windows the elevated-apply path loses foreground to the UAC
@@ -165,7 +166,8 @@ ApplicationWindow {
         width: Math.min(errorText.implicitWidth + 48, parent.width - 32)
         height: 44
         radius: 6
-        color: Theme.colorNegative
+        property bool isError: true
+        color: isError ? Theme.colorNegative : Theme.accent
         visible: opacity > 0
         opacity: 0
 
@@ -177,8 +179,9 @@ ApplicationWindow {
             horizontalAlignment: Text.AlignHCenter
         }
 
-        function show(msg) {
+        function show(msg, isErr) {
             errorText.text = msg
+            isError = isErr
             opacity = 1
             hideTimer.restart()
         }

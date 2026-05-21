@@ -38,6 +38,7 @@ class EnvVarModel(QAbstractListModel):
 
     pendingCountChanged = Signal()
     errorOccurred = Signal(str)
+    infoOccurred = Signal(str)
 
     def __init__(self, expand_fn=None, parent=None):
         super().__init__(parent)
@@ -96,33 +97,38 @@ class EnvVarModel(QAbstractListModel):
 
     # ------------------------------------------------------------------ slots
 
-    @Slot(str, str)
-    def addVariable(self, name: str, value: str) -> None:
+    @Slot(str, str, result=bool)
+    def addVariable(self, name: str, value: str) -> bool:
         name = name.strip()
         if not name:
-            return
+            return False
         if not _VAR_NAME_RE.match(name):
             self.errorOccurred.emit(f"Invalid variable name '{name}'. {_VAR_NAME_HELP}")
-            return
+            return False
         if name.upper() in _RESERVED_NAMES_UPPER:
             self.errorOccurred.emit(_RESERVED_MSG)
-            return
+            return False
         reason = _value_rejection_reason(value)
         if reason is not None:
             self.errorOccurred.emit(reason)
-            return
+            return False
         if name in self._by_name:
             existing_val = self._by_name[name]["value"]
+            was_pending_deletion = (
+                name in self._pending and self._pending[name] is None
+            )
             self._stage(name, value)
-            if value == existing_val and name not in self._new_names:
-                self.errorOccurred.emit(
+            if was_pending_deletion:
+                self.infoOccurred.emit(f"'{name}' restored — pending deletion cancelled.")
+            elif value == existing_val and name not in self._new_names:
+                self.infoOccurred.emit(
                     f"'{name}' already exists with that value — nothing changed."
                 )
             else:
-                self.errorOccurred.emit(
+                self.infoOccurred.emit(
                     f"'{name}' already existed — its value was replaced."
                 )
-            return
+            return True
         new_row = {"name": name, "value": ""}
         self._rows.append(new_row)
         self._rows.sort(key=lambda r: r["name"].lower())
@@ -130,6 +136,7 @@ class EnvVarModel(QAbstractListModel):
         self._pending[name] = value
         self._new_names.add(name)
         self._reset()
+        return True
 
     @Slot(str, result=bool)
     def hasVariable(self, name: str) -> bool:

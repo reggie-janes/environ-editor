@@ -17,7 +17,7 @@ Item {
     readonly property int scrollBarWidth: 12
 
     DiffDialog   { id: diffDialog;    onApplyRequested: tabIndex => appController.applyTab(tabIndex) }
-    AddVarDialog { id: addVarDialog;  onVariableAdded: (n, v) => root.model.addVariable(n, v) }
+    AddVarDialog { id: addVarDialog; model: root.model }
 
     TextEdit { id: clipHelper; visible: false; width: 0; height: 0 }
 

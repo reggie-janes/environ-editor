@@ -4,7 +4,7 @@ import os
 import platform
 import sys
 
-from PySide6.QtCore import QObject, QSettings, Property, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, QSettings, Property, QUrl, Signal, Slot, Qt
 
 from envedit.core.env_backend import EnvBackend, get_backend
 from envedit.core.privilege import is_elevated, is_elevated_via_wrapper
@@ -15,6 +15,7 @@ from envedit.models.path_model import PathModel
 class AppController(QObject):
     themeChanged = Signal()
     errorOccurred = Signal(str)
+    infoOccurred = Signal(str)
     isBusyChanged = Signal()
     # Fires after a successful Apply so the QML window can re-foreground
     # itself. Windows in particular tends to leave another app on top after
@@ -41,7 +42,12 @@ class AppController(QObject):
                   self._user_path_model, self._system_path_model):
             m.errorOccurred.connect(self.errorOccurred)
 
-        self._elevatedApplyDone.connect(self._onElevatedApplyDone)
+        for m in (self._user_var_model, self._system_var_model):
+            m.infoOccurred.connect(self.infoOccurred)
+
+        # QueuedConnection ensures the slot runs in the main thread even when
+        # the signal is emitted from a threading.Thread (not a QThread).
+        self._elevatedApplyDone.connect(self._onElevatedApplyDone, Qt.ConnectionType.QueuedConnection)
         self._load_all()
 
     # ------------------------------------------------------------------ models (read-only properties)
@@ -168,7 +174,9 @@ class AppController(QObject):
                     self._system_var_model.getPendingChanges(),
                     on_complete=lambda timed_out=False: self._elevatedApplyDone.emit(2, timed_out),
                 )
-                if applied:
+                if applied is None:
+                    pass  # UAC cancelled — pending state preserved, no error shown
+                elif applied:
                     self._reload(2)
                     self.requestActivateWindow.emit()
                 else:
@@ -179,7 +187,9 @@ class AppController(QObject):
                     self._system_path_model.getEntries(),
                     on_complete=lambda timed_out=False: self._elevatedApplyDone.emit(3, timed_out),
                 )
-                if applied:
+                if applied is None:
+                    pass  # UAC cancelled — pending state preserved, no error shown
+                elif applied:
                     self._reload(3)
                     self.requestActivateWindow.emit()
                 else:

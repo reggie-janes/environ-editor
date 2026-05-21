@@ -7,8 +7,7 @@ Dialog {
     id: root
     property string initialName: ""
     property string initialValue: ""
-
-    signal variableAdded(string name, string value)
+    property var model: null
 
     title: "Add Variable"
     modal: true
@@ -89,8 +88,11 @@ Dialog {
 
     function _submit() {
         const n = nameField.text.trim()
-        if (!n) return
-        root.variableAdded(n, valueField.text)
-        root.accept()
+        if (!n || !root.model) return
+        if (root.model.addVariable(n, valueField.text)) {
+            root.accept()
+        } else {
+            nameField.forceActiveFocus()
+        }
     }
 }

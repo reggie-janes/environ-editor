@@ -74,7 +74,7 @@ class WindowsBackend(EnvBackend):
         from envedit.core.privilege import is_elevated, request_elevation_and_apply
         if not is_elevated():
             if not request_elevation_and_apply({"system_vars": changes}, on_complete=on_complete):
-                raise RuntimeError("Elevation was cancelled.")
+                return None  # user cancelled UAC — not an error
             return False  # elevated child was launched but hasn't written yet
         import winreg
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _HKLM_ENV, 0,
