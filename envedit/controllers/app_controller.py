@@ -140,17 +140,24 @@ class AppController(QObject):
     def reloadTab(self, idx: int) -> None:
         self._reload(idx)
 
-    @Slot(int, result=str)
-    def getDiffText(self, idx: int) -> str:
+    @Slot(int, result="QVariantList")
+    def getDiffOps(self, idx: int) -> list:
+        """Structured diff for a tab; QML renders the badges and rows.
+
+        The lists from the models are returned verbatim — every op carries
+        an `op` field ("add" / "remove" / "edit" / "move"). Var ops have
+        name/old_value/new_value; path ops have path/old_pos/new_pos (and
+        old_path/new_path for edits).
+        """
         if idx == 0:
-            return self._var_diff(self._user_var_model)
+            return self._user_var_model.getDiffOperations()
         if idx == 1:
-            return self._path_diff(self._user_path_model)
+            return self._user_path_model.getDiffOperations()
         if idx == 2:
-            return self._var_diff(self._system_var_model)
+            return self._system_var_model.getDiffOperations()
         if idx == 3:
-            return self._path_diff(self._system_path_model)
-        return ""
+            return self._system_path_model.getDiffOperations()
+        return []
 
     @Slot(int)
     def applyTab(self, idx: int) -> None:
@@ -250,45 +257,6 @@ class AppController(QObject):
             self._system_var_model.loadData(self._backend.get_system_vars())
         elif idx == 3:
             self._system_path_model.loadData(self._backend.get_system_path())
-
-    @staticmethod
-    def _var_diff(model: EnvVarModel) -> str:
-        lines = []
-        for name, val in model.getPendingChanges().items():
-            lines.append(f"  DELETE  {name}" if val is None else f"  SET  {name} = {val}")
-        return "\n".join(lines)
-
-    @staticmethod
-    def _path_diff(model: PathModel) -> str:
-        # ADD/REMOVE/EDIT/MOVE lines from the model's structured per-entry diff.
-        # The set-based approach this replaced collapsed duplicates, so deleting
-        # one of two identical entries showed "(no changes)".
-        ops = model.getDiffOperations()
-        if not ops:
-            return "  (no changes)"
-        lines: list[str] = []
-        for op in ops:
-            kind = op["op"]
-            if kind == "add":
-                lines.append(f"  ADD     {op['path']}  (position {op['new_pos'] + 1})")
-            elif kind == "remove":
-                lines.append(f"  REMOVE  {op['path']}  (was position {op['old_pos'] + 1})")
-            elif kind == "edit":
-                if op["old_pos"] != op["new_pos"]:
-                    lines.append(
-                        f"  EDIT    {op['old_path']} → {op['new_path']}  "
-                        f"(position {op['old_pos'] + 1} → {op['new_pos'] + 1})"
-                    )
-                else:
-                    lines.append(
-                        f"  EDIT    {op['old_path']} → {op['new_path']}  "
-                        f"(position {op['new_pos'] + 1})"
-                    )
-            elif kind == "move":
-                lines.append(
-                    f"  MOVE    {op['path']}  : {op['old_pos'] + 1} → {op['new_pos'] + 1}"
-                )
-        return "\n".join(lines)
 
     @staticmethod
     def _detect_os_theme() -> str:

@@ -263,6 +263,43 @@ class EnvVarModel(QAbstractListModel):
     def getPendingChanges(self) -> dict[str, str | None]:
         return dict(self._pending)
 
+    def getDiffOperations(self) -> list[dict]:
+        """Structured diff of pending changes against the loaded snapshot.
+
+        Each operation is one of:
+          {"op": "add",    "name", "new_value"}
+          {"op": "remove", "name", "old_value"}
+          {"op": "edit",   "name", "old_value", "new_value"}
+
+        Sorted case-insensitively by name for stable rendering. Add vs.
+        edit is decided by `_new_names` so a name re-added after delete
+        still reports as ADD.
+        """
+        orig_by_name = {r["name"]: r["value"] for r in self._original_rows}
+        ops: list[dict] = []
+        for name in sorted(self._pending.keys(), key=str.lower):
+            pending_val = self._pending[name]
+            if pending_val is None:
+                ops.append({
+                    "op": "remove",
+                    "name": name,
+                    "old_value": orig_by_name.get(name, ""),
+                })
+            elif name in self._new_names:
+                ops.append({
+                    "op": "add",
+                    "name": name,
+                    "new_value": pending_val,
+                })
+            else:
+                ops.append({
+                    "op": "edit",
+                    "name": name,
+                    "old_value": orig_by_name.get(name, ""),
+                    "new_value": pending_val,
+                })
+        return ops
+
     # ------------------------------------------------------------------ internals
 
     def _visible_rows(self) -> list[dict]:

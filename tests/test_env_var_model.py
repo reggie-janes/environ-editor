@@ -319,6 +319,50 @@ class TestGetPendingChanges:
 
 
 # ---------------------------------------------------------------------------
+# getDiffOperations
+# ---------------------------------------------------------------------------
+
+class TestGetDiffOperations:
+    def test_empty_when_no_changes(self, populated_model):
+        assert populated_model.getDiffOperations() == []
+
+    def test_edit_op_carries_old_and_new_value(self, populated_model):
+        populated_model.editVariable(0, "ALPHA", "new")
+        ops = populated_model.getDiffOperations()
+        assert ops == [
+            {"op": "edit", "name": "ALPHA", "old_value": "aval", "new_value": "new"}
+        ]
+
+    def test_remove_op_carries_old_value(self, populated_model):
+        populated_model.deleteVariable(0)
+        ops = populated_model.getDiffOperations()
+        assert ops == [
+            {"op": "remove", "name": "ALPHA", "old_value": "aval"}
+        ]
+
+    def test_add_op_for_new_variable(self, populated_model):
+        populated_model.addVariable("DELTA", "dval")
+        ops = populated_model.getDiffOperations()
+        assert ops == [
+            {"op": "add", "name": "DELTA", "new_value": "dval"}
+        ]
+
+    def test_mixed_ops_sorted_case_insensitive(self, populated_model):
+        populated_model.editVariable(0, "ALPHA", "a2")
+        populated_model.deleteVariable(2)        # GAMMA
+        populated_model.addVariable("zeta", "z")
+        names = [op["name"] for op in populated_model.getDiffOperations()]
+        assert names == ["ALPHA", "GAMMA", "zeta"]
+
+    def test_rename_emits_add_and_remove(self, populated_model):
+        # Rename ALPHA → ALPHA2 — implemented as delete + add at the model
+        # layer, so the diff surfaces both ops.
+        populated_model.editVariable(0, "ALPHA2", "aval")
+        kinds = {op["op"] for op in populated_model.getDiffOperations()}
+        assert kinds == {"add", "remove"}
+
+
+# ---------------------------------------------------------------------------
 # pendingCountChanged signal
 # ---------------------------------------------------------------------------
 

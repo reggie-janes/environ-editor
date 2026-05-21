@@ -17,6 +17,14 @@ QtObject {
     readonly property color colorNegative: isDark ? "#f7768e" : "#c0384a"
     readonly property color colorNegativeText: "#ffffff"
 
+    // Diff badge palette (used by DiffDialog). ADD/EDIT/MOVE map to
+    // semantic palette entries; REMOVE reuses colorNegative; ADD picks
+    // its own green because colorPositive is gold (the row-pending tint).
+    readonly property color colorDiffAdd:    isDark ? "#73d35f" : "#2f8a3f"
+    readonly property color colorDiffEdit:   accent
+    readonly property color colorDiffMove:   textSubtle
+    readonly property color colorDiffRemove: colorNegative
+
     // Special
     readonly property color transparent: "transparent"
 

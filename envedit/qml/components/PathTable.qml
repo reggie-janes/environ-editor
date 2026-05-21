@@ -36,7 +36,7 @@ Item {
             onRemoveDuplicatesClicked: root.model.removeDuplicates()
             onReloadClicked: appController.reloadTab(root.tabIndex)
             onApplyClicked: {
-                diffDialog.diffText = appController.getDiffText(root.tabIndex)
+                diffDialog.diffOps = appController.getDiffOps(root.tabIndex)
                 diffDialog.tabIndex = root.tabIndex
                 diffDialog.open()
             }

@@ -58,77 +58,67 @@ class TestModelProperties:
 
 
 # ---------------------------------------------------------------------------
-# getDiffText
+# getDiffOps
 # ---------------------------------------------------------------------------
 
-class TestGetDiffText:
+class TestGetDiffOps:
     def test_diff_empty_when_no_var_changes(self, controller):
-        # Var tabs return empty when no pending changes
-        assert controller.getDiffText(0) == ""
-        assert controller.getDiffText(2) == ""
+        assert controller.getDiffOps(0) == []
+        assert controller.getDiffOps(2) == []
 
     def test_diff_path_empty_when_no_changes(self, controller):
-        # Issue 013: PATH diffs show changes only — the old behaviour was to
-        # dump the full post-apply list, which made it impossible to tell a
-        # small edit from a full wipe.
-        diff = controller.getDiffText(1)
-        assert "/usr/bin" not in diff
-        assert "no changes" in diff
+        assert controller.getDiffOps(1) == []
 
     def test_diff_user_vars_edit(self, controller):
         controller.userVarModel.editVariable(0, "BAR", "new_val")
-        diff = controller.getDiffText(0)
-        assert "BAR" in diff
-        assert "new_val" in diff
+        ops = controller.getDiffOps(0)
+        assert ops == [
+            {"op": "edit", "name": "BAR", "old_value": "bar_val", "new_value": "new_val"}
+        ]
 
     def test_diff_user_vars_delete(self, controller):
         controller.userVarModel.deleteVariable(0)
-        diff = controller.getDiffText(0)
-        assert "DELETE" in diff
+        ops = controller.getDiffOps(0)
+        assert len(ops) == 1
+        assert ops[0]["op"] == "remove"
+        assert ops[0]["name"] == "BAR"
+        assert ops[0]["old_value"] == "bar_val"
 
-    def test_diff_user_path(self, controller):
+    def test_diff_user_path_add(self, controller):
         controller.userPathModel.addEntry("/extra")
-        diff = controller.getDiffText(1)
-        assert "/extra" in diff
+        ops = controller.getDiffOps(1)
+        assert {"op": "add", "path": "/extra", "new_pos": 2} in ops
 
     def test_diff_system_vars_edit(self, controller):
         controller.systemVarModel.editVariable(0, "SYS_VAR", "new_sys")
-        diff = controller.getDiffText(2)
-        assert "SYS_VAR" in diff
-        assert "new_sys" in diff
+        ops = controller.getDiffOps(2)
+        assert ops == [
+            {"op": "edit", "name": "SYS_VAR", "old_value": "sys_val", "new_value": "new_sys"}
+        ]
 
     def test_diff_system_path(self, controller):
         controller.systemPathModel.addEntry("/sys/extra")
-        diff = controller.getDiffText(3)
-        assert "/sys/extra" in diff
+        ops = controller.getDiffOps(3)
+        assert any(o.get("path") == "/sys/extra" for o in ops)
 
     def test_diff_invalid_idx_returns_empty(self, controller):
-        assert controller.getDiffText(99) == ""
+        assert controller.getDiffOps(99) == []
 
-    def test_diff_path_shows_added_entry(self, controller):
-        # Adding a new entry should appear as an ADD line with position info.
-        controller.userPathModel.addEntry("/added/bin")
-        diff = controller.getDiffText(1)
-        assert "ADD" in diff
-        assert "/added/bin" in diff
+    def test_diff_var_add_classified_as_add(self, controller):
+        controller.userVarModel.addVariable("BRAND_NEW", "val")
+        ops = controller.getDiffOps(0)
+        assert ops == [{"op": "add", "name": "BRAND_NEW", "new_value": "val"}]
 
-    def test_set_var_diff_format(self, controller):
-        controller.userVarModel.editVariable(0, "BAR", "newval")
-        diff = controller.getDiffText(0)
-        assert "SET" in diff
-        assert "=" in diff
-
-    def test_diff_path_edit_emits_edit_line(self, controller):
-        # Editing an entry's value should show as a single EDIT line, not as
-        # a misleading ADD+REMOVE pair (the previous set-based diff couldn't
-        # tell edits from add/remove and reported both).
+    def test_diff_path_edit_emits_edit_op(self, controller):
+        # A value change on an existing entry surfaces as a single EDIT op,
+        # not as an ADD+REMOVE pair.
         controller.userPathModel.editEntry(0, "/usr/local/bin")
-        diff = controller.getDiffText(1)
-        assert "EDIT" in diff
-        assert "/usr/bin" in diff           # old value
-        assert "/usr/local/bin" in diff     # new value
-        assert "ADD" not in diff
-        assert "REMOVE" not in diff
+        ops = controller.getDiffOps(1)
+        edits = [o for o in ops if o["op"] == "edit"]
+        assert len(edits) == 1
+        assert edits[0]["old_path"] == "/usr/bin"
+        assert edits[0]["new_path"] == "/usr/local/bin"
+        assert all(o["op"] != "add" and o["op"] != "remove" for o in ops)
 
 
 # ---------------------------------------------------------------------------
@@ -157,38 +147,33 @@ class TestPathDiffWithDuplicates:
         # Delete the second /a (index 2). Old behaviour: "/a" still in new_set,
         # so the diff said "(no changes)".
         dup_controller.userPathModel.deleteEntry(2)
-        diff = dup_controller.getDiffText(1)
-        assert "REMOVE" in diff
-        assert "/a" in diff
-        assert "position 3" in diff   # the 2nd /a was at original index 2 (1-indexed: 3)
-        assert "no changes" not in diff
+        ops = dup_controller.getDiffOps(1)
+        removes = [o for o in ops if o["op"] == "remove"]
+        assert removes == [{"op": "remove", "path": "/a", "old_pos": 2}]
 
     def test_delete_first_of_two_duplicates_shows_correct_position(self, dup_controller):
-        # Delete the first /a (index 0).
         dup_controller.userPathModel.deleteEntry(0)
-        diff = dup_controller.getDiffText(1)
-        assert "REMOVE" in diff
-        assert "position 1" in diff   # first /a was at original index 0
+        ops = dup_controller.getDiffOps(1)
+        removes = [o for o in ops if o["op"] == "remove"]
+        assert removes and removes[0]["old_pos"] == 0
 
     def test_add_duplicate_of_existing_shows_add(self, dup_controller):
-        # Adding another /b should show ADD even though /b already exists.
+        # Adding another /b should show ADD even though /b already exists,
+        # with no spurious MOVE for the original /b.
         dup_controller.userPathModel.addEntry("/b")
-        diff = dup_controller.getDiffText(1)
-        assert "ADD" in diff
-        assert "/b" in diff
-        # No spurious MOVE for the original /b
-        assert "MOVE" not in diff
+        ops = dup_controller.getDiffOps(1)
+        assert any(o == {"op": "add", "path": "/b", "new_pos": 3} for o in ops)
+        assert not any(o["op"] == "move" for o in ops)
 
     def test_edit_one_of_duplicates_shows_single_edit(self, dup_controller):
         # Edit the second /a → /c. Old behaviour: ADD /c + spurious diff because
         # /a still in new_set so no REMOVE.
         dup_controller.userPathModel.editEntry(2, "/c")
-        diff = dup_controller.getDiffText(1)
-        assert "EDIT" in diff
-        assert "/a" in diff and "/c" in diff
-        assert "REMOVE" not in diff
-        # The first /a should be untouched.
-        assert diff.count("EDIT") == 1
+        ops = dup_controller.getDiffOps(1)
+        edits = [o for o in ops if o["op"] == "edit"]
+        assert len(edits) == 1
+        assert edits[0]["old_path"] == "/a" and edits[0]["new_path"] == "/c"
+        assert not any(o["op"] == "remove" for o in ops)
 
 
 # ---------------------------------------------------------------------------
