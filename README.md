@@ -118,6 +118,6 @@ envedit/
         ├── ConfirmDialog.qml    Generic confirmation dialog
         ├── DiffDialog.qml      Pending-changes diff before Apply
         └── Theme.qml           Singleton color palette (dark/light semantic colors)
-main.py                          Entry point (QGuiApplication + QQmlApplicationEngine)
+main.py                          Entry point (QApplication + QQmlApplicationEngine)
 build/                           Nuitka build scripts
 ```

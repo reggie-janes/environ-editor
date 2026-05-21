@@ -20,7 +20,7 @@ The codebase has three layers:
 | `env_backend.py` | `EnvBackend` ABC + `get_backend()` factory |
 | `platform_unix.py` | Linux/macOS: reads `os.environ` + `~/.config/envedit/env.sh`; user writes go to that file, system writes go to `/etc/profile.d/envedit.sh` via `pkexec`/`sudo` |
 | `platform_windows.py` | Windows: `winreg` reads/writes; all `winreg`/`ctypes` imports are inside methods so the file imports cleanly on Linux |
-| `privilege.py` | `is_elevated()` + `request_elevation_and_apply()` — re-launches via `pkexec`/`runas`/`osascript` |
+| `privilege.py` | `is_elevated()`, `is_elevated_via_wrapper()` + `request_elevation_and_apply()` — re-launches via `pkexec`/`runas`/`osascript` |
 
 **Python models + controller (`envedit/models/`, `envedit/controllers/`)** — QObject/QAbstractListModel bridge between the core and QML.
 
@@ -98,6 +98,18 @@ Tests live in `tests/`. `conftest.py` sets `QT_QPA_PLATFORM=offscreen` so Qt can
 - Qt native libs (`libgl1`, `libegl1`, xcb libs, etc.) are installed via the Dockerfile. If you add a dependency that needs a new system lib, add it there and rebuild the container.
 - The `.venv` directory lives in a named Docker volume; it survives `Rebuild Container` as long as the volume is not deleted.
 - For UI-less testing set `QPA_PLATFORM=offscreen`.
+
+## CI (.github/workflows/build.yml)
+
+The workflow has three jobs triggered differently:
+
+| Job | Trigger | Platforms | What it does |
+|-----|---------|-----------|--------------|
+| `test` | push to `main`, pull requests | Linux only | `uv sync --extra test` + `pytest` |
+| `build` | tags (`v*`), `workflow_dispatch` | Linux, Windows, macOS | `pytest` + Nuitka build + upload artifacts |
+| `release` | tags (`v*`) (needs `build`) | ubuntu-latest | Creates a draft GitHub Release with all artifacts |
+
+Qt system libraries needed by PySide6 are installed via the local composite action `.github/actions/install-qt-libs/action.yml` (Linux only; no-op on other platforms). Both `test` and `build` use it — add new system lib requirements there.
 
 ## Packaging (Nuitka)
 
