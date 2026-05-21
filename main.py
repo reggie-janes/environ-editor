@@ -21,7 +21,28 @@ def _apply_system_payload(payload: dict) -> int:
         backend.apply_system_vars(payload["system_vars"])
     if "system_path" in payload:
         backend.apply_system_path(payload["system_path"])
+    _allow_parent_to_foreground()
     return 0
+
+
+def _allow_parent_to_foreground() -> None:
+    """Lift Windows' SetForegroundWindow restriction for the parent.
+
+    After UAC consent the foreground rights belong to this elevated child;
+    when we exit, Windows by default does *not* return them to the parent
+    EnvEdit, so the parent's requestActivate() is silently denied and
+    whatever other app was previously focused stays on top. Calling
+    AllowSetForegroundWindow(ASFW_ANY) before exit lets the parent
+    re-foreground itself on its next try.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        ASFW_ANY = 0xFFFFFFFF
+        ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY)
+    except Exception:
+        pass
 
 
 def _maybe_run_elevated_apply() -> bool:

@@ -74,6 +74,22 @@ ApplicationWindow {
     Connections {
         target: appController
         function onErrorOccurred(msg) { errorBar.show(msg) }
+
+        // After Apply, ask the OS to bring our window back to front. On
+        // Windows the elevated-apply path loses foreground to the UAC
+        // consent UI and the OS often hands it to a different app rather
+        // than back to us; the non-elevated path can also lose ordering
+        // when modal dialogs close. raise() fixes intra-process z-order;
+        // requestActivate() asks for foreground (will succeed when we
+        // still hold foreground rights, e.g. immediately after the user
+        // clicked Apply, and on Windows is reinforced by the elevated
+        // child's AllowSetForegroundWindow call before it exits).
+        function onRequestActivateWindow() {
+            if (window.visibility === Window.Minimized)
+                window.showNormal()
+            window.raise()
+            window.requestActivate()
+        }
     }
 
     // ------------------------------------------------------------------ header bar

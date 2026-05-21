@@ -16,6 +16,11 @@ class AppController(QObject):
     themeChanged = Signal()
     errorOccurred = Signal(str)
     isBusyChanged = Signal()
+    # Fires after a successful Apply so the QML window can re-foreground
+    # itself. Windows in particular tends to leave another app on top after
+    # any disruption to focus (UAC consent for elevated apply, modal dialog
+    # close on non-elevated apply), so the window asks the OS to come back.
+    requestActivateWindow = Signal()
     _elevatedApplyDone = Signal(int, bool)  # (tab index, timed_out); from background thread
 
     def __init__(self, parent=None):
@@ -153,9 +158,11 @@ class AppController(QObject):
             if idx == 0:
                 self._backend.apply_user_vars(self._user_var_model.getPendingChanges())
                 self._reload(0)
+                self.requestActivateWindow.emit()
             elif idx == 1:
                 self._backend.apply_user_path(self._user_path_model.getEntries())
                 self._reload(1)
+                self.requestActivateWindow.emit()
             elif idx == 2:
                 applied = self._backend.apply_system_vars(
                     self._system_var_model.getPendingChanges(),
@@ -163,6 +170,7 @@ class AppController(QObject):
                 )
                 if applied:
                     self._reload(2)
+                    self.requestActivateWindow.emit()
                 else:
                     self._is_busy = True
                     self.isBusyChanged.emit()
@@ -173,6 +181,7 @@ class AppController(QObject):
                 )
                 if applied:
                     self._reload(3)
+                    self.requestActivateWindow.emit()
                 else:
                     self._is_busy = True
                     self.isBusyChanged.emit()
@@ -220,6 +229,7 @@ class AppController(QObject):
             )
             return
         self._reload(idx)
+        self.requestActivateWindow.emit()
 
     def _reload(self, idx: int) -> None:
         if idx == 0:
