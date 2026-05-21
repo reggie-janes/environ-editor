@@ -3,6 +3,7 @@ name: Build executables
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -15,16 +16,16 @@ jobs:
         include:
           - os: ubuntu-latest
             script: build/build_linux.sh
-            artifact_path: EnvEdit
-            artifact_name: EnvEdit-linux
+            artifact_name: EnvEdit-linux-x86_64
+            asset_path: EnvEdit-linux-x86_64.tar.gz
           - os: windows-latest
             script: build/build_windows.bat
-            artifact_path: EnvEdit.exe
-            artifact_name: EnvEdit-windows
+            artifact_name: EnvEdit-windows-x86_64
+            asset_path: EnvEdit-windows-x86_64.exe
           - os: macos-latest
             script: build/build_macos.sh
-            artifact_path: EnvEdit.app
             artifact_name: EnvEdit-macos
+            asset_path: EnvEdit-macos.zip
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -60,9 +61,43 @@ jobs:
         shell: cmd
         run: uv run ${{ matrix.script }}
 
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czf ${{ matrix.asset_path }} EnvEdit
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        run: zip -r ${{ matrix.asset_path }} EnvEdit.app
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: mv EnvEdit.exe ${{ matrix.asset_path }}
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          path: ${{ matrix.asset_path }}
           if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: release-assets/*
+          fail_on_unmatched_files: true
