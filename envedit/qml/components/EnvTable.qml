@@ -125,6 +125,7 @@ Item {
                 height: 38
                 color: {
                     if (model.isDeleted)  return Theme.rowDeleted
+                    if (model.isNew)      return Theme.rowNew
                     if (model.isPending)  return Theme.rowPending
                     return hoverHandler.hovered ? Theme.rowHover : Theme.transparent
                 }

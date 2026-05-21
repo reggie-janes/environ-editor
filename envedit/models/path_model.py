@@ -67,6 +67,7 @@ class PathModel(QAbstractListModel):
     PendingRole   = Qt.UserRole + 4
     DuplicateRole = Qt.UserRole + 5
     DeletedRole   = Qt.UserRole + 6
+    NewRole       = Qt.UserRole + 7
 
     pendingCountChanged = Signal()
     filterChanged = Signal()
@@ -115,6 +116,7 @@ class PathModel(QAbstractListModel):
             self.PendingRole:   b"isPending",
             self.DuplicateRole: b"isDuplicate",
             self.DeletedRole:   b"isDeleted",
+            self.NewRole:       b"isNew",
         }
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
@@ -137,6 +139,8 @@ class PathModel(QAbstractListModel):
             return self._dup_counts[entry["path"]] > 1
         if role == self.DeletedRole:
             return entry["is_deleted"]
+        if role == self.NewRole:
+            return entry["is_new"]
         return None
 
     # ------------------------------------------------------------------ slots

@@ -176,6 +176,24 @@ class TestAddVariable:
         populated_model.addVariable("NEWVAR", "newval")
         assert populated_model.pendingCount == 1
 
+    def test_add_new_variable_reports_is_new(self, populated_model):
+        # Newly added variables report isNew so the table highlights them
+        # distinctly from edited variables.
+        populated_model.addVariable("NEWVAR", "newval")
+        row = next(
+            i for i in range(populated_model.rowCount())
+            if populated_model.data(populated_model.index(i), EnvVarModel.NameRole) == "NEWVAR"
+        )
+        idx = populated_model.index(row)
+        assert populated_model.data(idx, EnvVarModel.NewRole) is True
+        assert populated_model.data(idx, EnvVarModel.PendingRole) is True
+
+    def test_edited_existing_variable_is_not_new(self, populated_model):
+        populated_model.editVariable(0, "ALPHA", "changed")
+        idx = populated_model.index(0)
+        assert populated_model.data(idx, EnvVarModel.NewRole) is False
+        assert populated_model.data(idx, EnvVarModel.PendingRole) is True
+
     def test_add_existing_variable_replaces_and_notifies(self, populated_model, qtbot):
         # Issue 014: collisions used to silently overwrite the existing row.
         # New behaviour: the value is replaced (preserving the convenience of

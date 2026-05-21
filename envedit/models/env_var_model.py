@@ -35,6 +35,7 @@ class EnvVarModel(QAbstractListModel):
     ExpandedRole = Qt.UserRole + 3
     PendingRole  = Qt.UserRole + 4
     DeletedRole  = Qt.UserRole + 5
+    NewRole      = Qt.UserRole + 6
 
     pendingCountChanged = Signal()
     errorOccurred = Signal(str)
@@ -70,6 +71,7 @@ class EnvVarModel(QAbstractListModel):
             self.ExpandedRole: b"expanded",
             self.PendingRole:  b"isPending",
             self.DeletedRole:  b"isDeleted",
+            self.NewRole:      b"isNew",
         }
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
@@ -93,6 +95,8 @@ class EnvVarModel(QAbstractListModel):
             return pending_val is not ...
         if role == self.DeletedRole:
             return pending_val is None
+        if role == self.NewRole:
+            return name in self._new_names
         return None
 
     # ------------------------------------------------------------------ slots

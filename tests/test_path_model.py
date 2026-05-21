@@ -138,6 +138,23 @@ class TestAddEntry:
         idx = populated_model.index(populated_model.rowCount() - 1)
         assert populated_model.data(idx, PathModel.PendingRole) is True
 
+    def test_new_entry_has_is_new_true(self, populated_model):
+        # Newly added entries report isNew so the table can highlight them
+        # in a colour distinct from edited (pending-but-not-new) entries.
+        populated_model.addEntry("/new/path")
+        idx = populated_model.index(populated_model.rowCount() - 1)
+        assert populated_model.data(idx, PathModel.NewRole) is True
+
+    def test_existing_entry_has_is_new_false(self, populated_model):
+        idx = populated_model.index(0)
+        assert populated_model.data(idx, PathModel.NewRole) is False
+
+    def test_edited_existing_entry_is_not_new(self, populated_model):
+        populated_model.editEntry(0, "/usr/local/bin")
+        idx = populated_model.index(0)
+        assert populated_model.data(idx, PathModel.NewRole) is False
+        assert populated_model.data(idx, PathModel.PendingRole) is True
+
     def test_empty_path_is_noop(self, populated_model):
         before = populated_model.rowCount()
         populated_model.addEntry("")

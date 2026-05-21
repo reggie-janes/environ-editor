@@ -110,6 +110,7 @@ Item {
                 color: {
                     if (model.isDeleted)   return Theme.rowDeleted
                     if (model.isDuplicate) return Theme.rowDuplicate
+                    if (model.isNew)       return Theme.rowNew
                     if (model.isPending)   return Theme.rowPending
                     return dragArea.containsMouse ? Theme.rowHover : Theme.transparent
                 }
