@@ -15,6 +15,18 @@ _VAR_NAME_HELP = (
     "Names must start with a letter or underscore and contain only letters, "
     "digits, or underscores."
 )
+_VAR_VALUE_HELP = "Variable values cannot contain newline or null characters."
+
+# Names that belong to a dedicated tab and must not appear in the variable
+# table. Case-insensitive so that `Path`/`path`/`PATH` all match on Windows.
+_RESERVED_NAMES_UPPER = {"PATH"}
+_RESERVED_MSG = "PATH is managed on the PATH tab — switch tabs to edit it."
+
+
+def _value_rejection_reason(value: str) -> str | None:
+    if "\n" in value or "\r" in value or "\x00" in value:
+        return _VAR_VALUE_HELP
+    return None
 
 
 class EnvVarModel(QAbstractListModel):
@@ -92,6 +104,13 @@ class EnvVarModel(QAbstractListModel):
         if not _VAR_NAME_RE.match(name):
             self.errorOccurred.emit(f"Invalid variable name '{name}'. {_VAR_NAME_HELP}")
             return
+        if name.upper() in _RESERVED_NAMES_UPPER:
+            self.errorOccurred.emit(_RESERVED_MSG)
+            return
+        reason = _value_rejection_reason(value)
+        if reason is not None:
+            self.errorOccurred.emit(reason)
+            return
         if name in self._by_name:
             existing_val = self._by_name[name]["value"]
             self._stage(name, value)
@@ -121,12 +140,21 @@ class EnvVarModel(QAbstractListModel):
         rows = self._visible_rows()
         if index < 0 or index >= len(rows):
             return
+        reason = _value_rejection_reason(value)
+        if reason is not None:
+            self.errorOccurred.emit(reason)
+            return
         orig_name = rows[index]["name"]
         if orig_name != name:
             if not _VAR_NAME_RE.match(name):
                 self.errorOccurred.emit(
                     f"Invalid variable name '{name}'. {_VAR_NAME_HELP}"
                 )
+                mi = self.index(index, 0)
+                self.dataChanged.emit(mi, mi, [self.NameRole])
+                return
+            if name.upper() in _RESERVED_NAMES_UPPER:
+                self.errorOccurred.emit(_RESERVED_MSG)
                 mi = self.index(index, 0)
                 self.dataChanged.emit(mi, mi, [self.NameRole])
                 return
@@ -155,8 +183,9 @@ class EnvVarModel(QAbstractListModel):
                     del self._pending[orig_name]
                     self._new_names.discard(orig_name)
                 else:
-                    # The original row carries the deletion mark; clear it.
-                    self._pending.pop(orig_name, None)
+                    # orig_name is an original row; mark it deleted so the
+                    # rename actually removes it on apply (not just unlinks B).
+                    self._pending[orig_name] = None
                 if value != collided["value"]:
                     self._pending[name] = value
                 self._reset()

@@ -280,14 +280,20 @@ class UnixBackend(EnvBackend):
                 _write_as_root(_SYSTEM_PROFILE_D, content)
                 on_complete(timed_out=False)
             except Exception:
-                # _write_as_root surfaces auth failure as CalledProcessError;
-                # the controller's reload after on_complete will show the
-                # unchanged state, which is the right thing here.
-                on_complete(timed_out=False)
+                # CalledProcessError: user cancelled pkexec/sudo prompt or
+                # the write was denied. Signal failure so the controller shows
+                # an error snackbar and keeps pending state intact for retry.
+                on_complete(timed_out=True)
         threading.Thread(target=_run, daemon=True).start()
         return False
 
     def apply_user_path(self, entries: list[str]) -> None:
+        # Never write an empty PATH — that would lock the user out of every
+        # command-line tool on the next shell start. If all user-managed rows
+        # are removed, preserve the inherit sentinel so the inherited system
+        # PATH still applies at login.
+        if not entries:
+            entries = [_PATH_INHERIT_TOKEN]
         self.apply_user_vars({"PATH": os.pathsep.join(entries)})
 
     def apply_system_path(self, entries: list[str], on_complete=None) -> bool:

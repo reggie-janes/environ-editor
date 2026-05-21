@@ -391,14 +391,18 @@ class TestUnixBackendApplyUserPath:
         result = _parse_shell_assigns(envedit_sh.read_text())
         assert result["PATH"] == "/usr/bin:/bin:/usr/local/bin"
 
-    def test_empty_list_writes_empty_PATH(self, tmp_path):
+    def test_empty_list_preserves_inherit_sentinel(self, tmp_path):
+        # Applying an empty PATH list must never write `export PATH=''` — that
+        # would lock the user out of every command at next login. The sentinel
+        # ($PATH) is re-inserted so the shell-inherited PATH remains intact.
         envedit_sh = tmp_path / "env.sh"
         backend = UnixBackend()
         with patch("envedit.core.platform_unix._ENVEDIT_SH", envedit_sh), \
              patch("envedit.core.platform_unix._ensure_sourced_in_profile"):
             backend.apply_user_path([])
-        result = _parse_shell_assigns(envedit_sh.read_text())
-        assert result["PATH"] == ""
+        text = envedit_sh.read_text()
+        assert "PATH=''" not in text, "empty PATH written — lockout risk"
+        assert "$PATH" in text, "inherit sentinel missing after empty apply"
 
 
 # ---------------------------------------------------------------------------

@@ -144,7 +144,11 @@ def request_elevation_and_apply(changes: dict, on_complete: Callable[..., None] 
                         hProcess, 1000
                     )
                     if ret == WAIT_OBJECT_0:
-                        on_complete(timed_out=False)
+                        exit_code = wintypes.DWORD()
+                        ctypes.windll.kernel32.GetExitCodeProcess(
+                            hProcess, ctypes.byref(exit_code)
+                        )
+                        on_complete(timed_out=(exit_code.value != 0))
                         return
                     if ret != WAIT_TIMEOUT:
                         # Wait failure of some other kind — give up rather

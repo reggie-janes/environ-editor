@@ -17,10 +17,15 @@ QML_DIR = (_ROOT / "qml") if (_ROOT / "qml" / "main.qml").exists() else (_ROOT /
 def _apply_system_payload(payload: dict) -> int:
     from envedit.core.env_backend import get_backend
     backend = get_backend()
-    if "system_vars" in payload:
-        backend.apply_system_vars(payload["system_vars"])
-    if "system_path" in payload:
-        backend.apply_system_path(payload["system_path"])
+    try:
+        if "system_vars" in payload:
+            backend.apply_system_vars(payload["system_vars"])
+        if "system_path" in payload:
+            backend.apply_system_path(payload["system_path"])
+    except Exception as exc:
+        print(f"envedit elevated apply failed: {exc}", file=sys.stderr)
+        _allow_parent_to_foreground()
+        return 2
     _allow_parent_to_foreground()
     return 0
 
