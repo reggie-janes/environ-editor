@@ -54,6 +54,7 @@ Item {
             font.family: "Roboto Mono"
             font.pixelSize: 13
             leftPadding: 10
+            color: Theme.textNormal
             onTextChanged: root.model && root.model.setFilter(text)
             Keys.onEscapePressed: clear()
             background: Rectangle {
