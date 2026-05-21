@@ -17,8 +17,9 @@ The codebase has three layers:
 
 | File | Role |
 |------|------|
-| `env_backend.py` | `EnvBackend` ABC + `get_backend()` factory |
-| `platform_unix.py` | Linux/macOS: reads `os.environ` + `~/.config/envedit/env.sh`; user writes go to that file, system writes go to `/etc/profile.d/envedit.sh` via `pkexec`/`sudo` |
+| `env_backend.py` | `EnvBackend` ABC + `get_backend()` factory (dispatches by `sys.platform`) |
+| `platform_unix.py` | Linux: reads `os.environ` + `~/.config/envedit/env.sh`; user writes go to that file, system writes go to `/etc/profile.d/envedit.sh` via `pkexec`/`sudo`. Also the base class for `MacOSBackend`. |
+| `platform_macos.py` | macOS: `MacOSBackend(UnixBackend)` — inherits env.sh write path, additionally writes a LaunchAgent/LaunchDaemon plist and calls `launchctl setenv`, because macOS GUI apps inherit env from `launchd`, not shell-init files. |
 | `platform_windows.py` | Windows: `winreg` reads/writes; all `winreg`/`ctypes` imports are inside methods so the file imports cleanly on Linux |
 | `privilege.py` | `is_elevated()`, `is_elevated_via_wrapper()` + `request_elevation_and_apply()` — re-launches via `pkexec`/`runas`/`osascript` |
 
@@ -76,6 +77,9 @@ engine.load(str(QML_DIR / "main.qml"))
 - **Windows elevation wait**: `privilege.request_elevation_and_apply` polls `WaitForSingleObject` with a 1 s interval and no upper bound, so a slow UAC consent (password lookup, fingerprint scan) won't trigger a spurious "timed out" reload while the elevated child is still mid-write.
 - **User PATH writes on Unix** go through `apply_user_vars({"PATH": ...})` which lands in `~/.config/envedit/env.sh`. The file is auto-sourced from the user's login profile (`~/.bash_profile`, `~/.bash_login`, or `~/.profile`) on first write, plus `~/.bashrc` / `~/.zshrc` if present.
 - **System writes on Unix** go to `/etc/profile.d/envedit.sh` (not `/etc/environment`), which EnvEdit owns end-to-end and can safely rewrite without corrupting foreign content managed by distro packages or cloud-init.
+- **macOS GUI apps don't read shell init files** — they inherit env from `launchd`. So `MacOSBackend.apply_user_vars` does *three* things on top of the Unix env.sh write: (1) rewrites `~/Library/LaunchAgents/com.envedit.user-env.plist` with the full managed set (canonical store is the plist's `EnvironmentVariables` dict — easy round-trip via `plistlib`; the `RunAtLoad`/`ProgramArguments` script re-runs `launchctl setenv …` at next login), (2) calls `launchctl setenv NAME VALUE` for each change so already-running launchd sees the value immediately, (3) updates `os.environ` in-process so EnvEdit's own subprocesses see the change. `apply_system_vars` writes a root-owned `/Library/LaunchDaemons/com.envedit.system-env.plist` plus mirrors live changes to system launchd, all behind a single `osascript … with administrator privileges` password prompt (base64-in-argv like the Linux `_write_as_root` to dodge the TOCTOU).
+- **macOS system PATH** is dual-written: `/Library/LaunchDaemons/com.envedit.system-env.plist`'s PATH key covers launchd-spawned GUI apps, while `/etc/paths.d/envedit` (one path per line) covers shells via `path_helper(8)`. `get_system_path` reads `/etc/paths.d/envedit` as the canonical source so user-visible ordering matches what `path_helper` will produce.
+- **macOS canonical store is the plist, with env.sh as fallback**: `MacOSBackend.get_user_vars` reads the LaunchAgent plist; only when the plist is absent does it fall back to env.sh. That keeps the post-Apply reload coherent with what GUI apps will see. env.sh is still written for Terminal-user benefit.
 
 ## Adding a new platform
 

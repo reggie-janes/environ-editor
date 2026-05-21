@@ -45,6 +45,8 @@ def get_backend() -> EnvBackend:
     if sys.platform == "win32":
         from envedit.core.platform_windows import WindowsBackend
         return WindowsBackend()
-    else:
-        from envedit.core.platform_unix import UnixBackend
-        return UnixBackend()
+    if sys.platform == "darwin":
+        from envedit.core.platform_macos import MacOSBackend
+        return MacOSBackend()
+    from envedit.core.platform_unix import UnixBackend
+    return UnixBackend()
